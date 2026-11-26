@@ -257,6 +257,7 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
   border: var(--hairline) solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--overlay-shadow);
+  z-index: 1; /* above the absolute overlay note that follows it in the bar */
 }
 .bar-more-menu #reset-view { align-self: flex-start; }
 .bar-note { flex: 1 0 100%; margin: 0; }
@@ -300,7 +301,8 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 }
 .scope-switch .ghost-button { padding: 0 var(--s3); }
 
-#overlay-note { min-height: 2lh; position: relative; }
+/* No position here: an id rule would beat the bar's absolute note and push the bar groups to zero width. */
+#overlay-note { min-height: 2lh; }
 #overlay-note:empty { min-height: 0; }
 
 .note-progress {

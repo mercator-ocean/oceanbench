@@ -20,6 +20,7 @@ import {
   probeFastScrubRace,
   probeParticleLiveness,
   probeMenuAboveHandles,
+  probeOverlayPanelsInViewport,
   probeRenderFingerprints,
   probeRenderedEmDashes,
   probeSoftwareInflateEquivalence,
@@ -327,6 +328,7 @@ async function runBehaviouralPass(playwright, baseUrl, { seed }) {
       await probeParticleLiveness(context, baseUrl, viewerUrlPath, failures);
       await probeMenuAboveHandles(context, baseUrl, viewerUrlPath, failures);
       await context.close();
+      await probeOverlayPanelsInViewport(browser, baseUrl, viewerUrlPath, failures);
       await probeSoftwareInflateEquivalence(browser, baseUrl, viewerUrlPath, baseline, failures);
     } else {
       await context.close();

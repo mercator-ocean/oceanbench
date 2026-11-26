@@ -453,3 +453,47 @@ export async function probeMenuAboveHandles(context, baseUrl, viewerUrlPath, fai
     await page.close();
   }
 }
+
+// P8: every overlay opened from More keeps the More menu, the bar note and the bar groups
+// fully on screen, at desktop, laptop and phone widths. Choosing an overlay used to let
+// the note take the whole bar row, which threw More (and its menu) off the left edge.
+export async function probeOverlayPanelsInViewport(browser, baseUrl, viewerUrlPath, failures) {
+  const sizes = [
+    { width: 1440, height: 900 },
+    { width: 1280, height: 720 },
+    { width: 390, height: 844 },
+  ];
+  for (const viewport of sizes) {
+    const page = await browser.newPage({ viewport });
+    try {
+      await page.goto(`${baseUrl}${viewerUrlPath}`);
+      await page.waitForSelector(".bar-more > summary", { state: "attached" });
+      if (viewport.width < 600) await page.click("#filters-toggle");
+      await page.click(".bar-more > summary");
+      const modes = await page.$$eval("#overlay-mode option", (options) =>
+        options.filter((option) => !option.disabled && !option.hidden && option.value !== "none").map((option) => option.value),
+      );
+      for (const mode of modes) {
+        await page.selectOption("#overlay-mode", mode);
+        await page.waitForTimeout(1500);
+        const outside = await page.evaluate(() => {
+          const width = document.documentElement.clientWidth;
+          const height = window.innerHeight;
+          const boxes = [".bar-more-menu", "#overlay-note", ".bar-more > summary"];
+          return boxes.flatMap((selector) => {
+            const element = document.querySelector(selector);
+            if (!element || element.offsetParent === null || !element.textContent.trim()) return [];
+            const box = element.getBoundingClientRect();
+            const inside = box.left >= -0.5 && box.top >= -0.5 && box.right <= width + 0.5 && box.bottom <= height + 0.5;
+            return inside ? [] : [`${selector} at ${Math.round(box.left)},${Math.round(box.top)}-${Math.round(box.right)},${Math.round(box.bottom)}`];
+          });
+        });
+        for (const entry of outside) failures.push(`overlay panel off screen (${viewport.width}x${viewport.height}, ${mode}): ${entry}`);
+      }
+    } catch (error) {
+      failures.push(`overlay panel in viewport (${viewport.width}): ${error.message}`);
+    } finally {
+      await page.close();
+    }
+  }
+}

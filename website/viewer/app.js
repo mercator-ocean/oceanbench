@@ -5457,6 +5457,26 @@ function wireBarExtras() {
       about.addEventListener("click", () => about.closest("details")?.removeAttribute("open"));
     }
   }
+  // Keep the More menu fully on screen whatever moved the button: shift it right when
+  // its right-anchored box would start left of the viewport, and cap its height.
+  const more = bar.querySelector(".bar-more");
+  const menu = bar.querySelector(".bar-more-menu");
+  const clampMenu = () => {
+    menu.style.right = "";
+    menu.style.maxHeight = "";
+    if (!more.open) return;
+    const margin = 8;
+    const box = menu.getBoundingClientRect();
+    if (box.left < margin) menu.style.right = `${Math.round(box.left - margin)}px`;
+    const room = window.innerHeight - box.top - margin;
+    if (box.height > room) {
+      menu.style.maxHeight = `${Math.max(room, 120)}px`;
+      menu.style.overflowY = "auto";
+    }
+  };
+  more.addEventListener("toggle", clampMenu);
+  menu.addEventListener("change", () => requestAnimationFrame(clampMenu));
+  window.addEventListener("resize", clampMenu);
   updateStateChip();
 }
 
