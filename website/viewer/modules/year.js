@@ -63,6 +63,15 @@ export function yearVariableMapping(variableKey) {
   return { ...entry, component: null };
 }
 
+// The builder bins match-ups with floor((lat - lat0) / dlat) (viewer_artifacts.py
+// _grid_cells), so lat0 + i * dlat is the south EDGE of row i. The renderer treats
+// coordinates as cell centres, so pass lat0 + (i + 0.5) * dlat (same for longitude).
+function yearGridCentres(lat0, dlat, nlat, lon0, dlon, nlon) {
+  const latitudes = Array.from({ length: nlat }, (_, i) => lat0 + (i + 0.5) * dlat);
+  const longitudes = Array.from({ length: nlon }, (_, j) => lon0 + (j + 0.5) * dlon);
+  return { latitudes, longitudes };
+}
+
 // Build a renderable field ({data, width, height} + lat/lon axes) from the year
 // error-geography artifact for a short variable name at the requested lead day.
 // null cells (no observation) become NaN. Returns null when the variable/lead is
@@ -80,9 +89,7 @@ export function buildYearGeographyField(geography, shortName, leadDay) {
     const value = flat[i];
     data[i] = value == null ? NaN : value;
   }
-  const latitudes = Array.from({ length: nlat }, (_, i) => lat0 + i * dlat);
-  const longitudes = Array.from({ length: nlon }, (_, j) => lon0 + j * dlon);
-  return { field: { data, width: nlon, height: nlat }, latitudes, longitudes };
+  return { field: { data, width: nlon, height: nlat }, ...yearGridCentres(lat0, dlat, nlat, lon0, dlon, nlon) };
 }
 
 function leadArray(record, leadDay) {
@@ -185,9 +192,7 @@ export function buildYearBiasField(geography, shortName, leadDay) {
     const value = flat[i];
     data[i] = value == null ? NaN : value;
   }
-  const latitudes = Array.from({ length: nlat }, (_, i) => lat0 + i * dlat);
-  const longitudes = Array.from({ length: nlon }, (_, j) => lon0 + j * dlon);
-  return { field: { data, width: nlon, height: nlat }, latitudes, longitudes };
+  return { field: { data, width: nlon, height: nlat }, ...yearGridCentres(lat0, dlat, nlat, lon0, dlon, nlon) };
 }
 
 // Symmetric upper bound for the diverging bias scale: the 98th percentile of the finite
