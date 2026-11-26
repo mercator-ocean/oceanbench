@@ -3823,8 +3823,8 @@ async function renderRailYearRmsd(shown) {
   const bandNote = !lines.some((line) => line.ciLow)
     ? ""
     : biasMode
-      ? "Band: 95%, mean ± 1.96 sd/√n, a lower bound (obs are correlated). "
-      : "Band: 95%, a lower bound (obs are correlated). ";
+      ? "Band: 95% per start, block bootstrap over 5° boxes of obs (2° for IBI). "
+      : "95 % band, likely too narrow (observations are correlated). ";
   note.textContent = lines.length
     ? `${period ? `${period.label}. ` : ""}${bandNote}Click a point to open that date.`
     : biasMode
