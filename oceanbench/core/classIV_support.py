@@ -62,36 +62,6 @@ def _assign_temperature_depth_bins(depth_values: numpy.ndarray) -> numpy.ndarray
     return bin_assignments
 
 
-def _interpolated_observation_record_at_target_depth(
-    group_key,
-    group: pandas.DataFrame,
-    group_keys: list[str],
-    depth_key: str,
-    target_depth: float,
-) -> dict[str, object] | None:
-    depths = group[depth_key].to_numpy()
-    values = group["observation_value"].to_numpy()
-    below_depths = depths[depths <= target_depth]
-    above_depths = depths[depths >= target_depth]
-    if below_depths.size == 0 or above_depths.size == 0:
-        return None
-    below_depth = below_depths.max()
-    above_depth = above_depths.min()
-    below_value = values[depths == below_depth].mean()
-    above_value = values[depths == above_depth].mean()
-    interpolated_value = (
-        below_value
-        if numpy.isclose(below_depth, above_depth)
-        else below_value + ((target_depth - below_depth) / (above_depth - below_depth)) * (above_value - below_value)
-    )
-    normalized_group_key = group_key if isinstance(group_key, tuple) else (group_key,)
-    return {
-        **dict(zip(group_keys, normalized_group_key)),
-        "observation_value": interpolated_value,
-        depth_key: target_depth,
-    }
-
-
 def _interpolate_observations_to_target_depth(
     observations_dataframe: pandas.DataFrame,
     target_depth: float,
@@ -116,18 +86,6 @@ def _interpolate_observations_to_target_depth(
         "lead_day",
     ]
 
-    if os.environ.get("OCEANBENCH_CLASS4_DEPTH_LOOP") == "1":
-        records = [
-            record
-            for record in (
-                _interpolated_observation_record_at_target_depth(group_key, group, group_keys, depth_key, target_depth)
-                for group_key, group in filtered_observations_dataframe.groupby(group_keys, sort=False)
-            )
-            if record is not None
-        ]
-        if not records:
-            return pandas.DataFrame(columns=target_columns)
-        return pandas.DataFrame.from_records(records)[target_columns]
     group_numbers = filtered_observations_dataframe.groupby(group_keys, sort=False).ngroup().to_numpy()
     in_group = group_numbers >= 0
     rows = filtered_observations_dataframe.loc[in_group]
