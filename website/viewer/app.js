@@ -734,6 +734,21 @@ async function renderPanel(panel) {
   }
 }
 
+// Aligns a partner field onto a target grid for a difference. A coarser target gets the
+// block mean of the finer cells (nearest sampling would alias the fine scales into the
+// difference), as the spectrum path does; a same-resolution or finer target is sampled
+// by nearest cell as before.
+function gridStep(coordinates) {
+  return coordinates.length > 1 ? Math.abs(coordinates[1] - coordinates[0]) : 0;
+}
+
+function alignOntoGrid(field, sourceLat, sourceLon, targetLat, targetLon) {
+  const coarserTarget = gridStep(targetLat) > gridStep(sourceLat) * 1.5;
+  return coarserTarget
+    ? blockAverageOntoGrid(field, sourceLat, sourceLon, targetLat, targetLon)
+    : resampleOntoGrid(field, sourceLat, sourceLon, targetLat, targetLon);
+}
+
 async function readAlignedField(panel, sourceSlug, variable, level, start, leadIndex, targetLat, targetLon) {
   await ensureStore(sourceSlug);
   // The indices arrive in the host panel's store; a partner store is indexed by the same
@@ -747,7 +762,7 @@ async function readAlignedField(panel, sourceSlug, variable, level, start, leadI
   const layer = await readLayer(stores.get(sourceSlug), { variable, level, startIndex: start, leadIndex, signal });
   const coordinates = await loadCoordinates(sourceSlug, level);
   if (!targetLat) return { field: layer, latitudes: coordinates.latitudes, longitudes: coordinates.longitudes };
-  const aligned = resampleOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, targetLat, targetLon);
+  const aligned = alignOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, targetLat, targetLon);
   return { field: aligned, latitudes: targetLat, longitudes: targetLon, compressedBytes: layer.compressedBytes };
 }
 
@@ -795,7 +810,7 @@ async function readStatisticsLayer(slug, variable, leadDay, target = null) {
   const { latitudes, longitudes } = await loadCoordinates(slug, level);
   if (!target) return { field: layer, latitudes, longitudes };
   return {
-    field: resampleOntoGrid(layer, latitudes, longitudes, target.latitudes, target.longitudes),
+    field: alignOntoGrid(layer, latitudes, longitudes, target.latitudes, target.longitudes),
     latitudes: target.latitudes,
     longitudes: target.longitudes,
   };
