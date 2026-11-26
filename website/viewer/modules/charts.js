@@ -509,7 +509,7 @@ export function rmsdByDepthSVG(
       .map((bin) => ({ ...bin, row: rowOfLabel.get(bin.label) }))
       .sort((a, b) => a.row - b.row);
     const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.rmsd).toFixed(1)} ${yOf(point.row).toFixed(1)}`);
-    if (points.length) ends.push({ label: line.label, color: line.color, y: yOf(points.at(-1).row) });
+    if (points.length) ends.push({ label: line.label, color: line.color, y: Math.min(...points.map((point) => yOf(point.row))) });
     body += `<path d="${path.join(" ")}" fill="none" stroke="${line.color}" stroke-width="1.8"/>`;
     for (const point of points) {
       const x = xOf(point.rmsd).toFixed(1);

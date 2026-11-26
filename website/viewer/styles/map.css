@@ -343,8 +343,9 @@ SPDX-License-Identifier: EUPL-1.2
 
 .example-note {
   position: absolute;
-  left: var(--s2);
-  bottom: calc(var(--head-strip-height, 0rem) + var(--s2));
+  left: 50%;
+  top: calc(var(--s2) * 2 + 1.75rem);
+  transform: translateX(-50%);
   z-index: 5;
   max-width: min(var(--ob-viewer-note-max), calc(100% - var(--ob-viewer-readout-min)));
   margin: 0;
