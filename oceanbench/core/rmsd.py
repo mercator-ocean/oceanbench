@@ -311,11 +311,22 @@ def _rmsd_with_configured_dask(challenger_dataset, reference_dataset, variables,
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
     missing_fraction_dataset = _missing_fractions(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
-    ).compute()
-    computed_rmsd_dataset = _rmsd(
-        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
-    ).compute()
+    )
+    rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask)
+    if _has_depth_resolved_variable(missing_fraction_dataset):
+        # Computed together with the RMSD at 1/12 degree, the missing fractions of depth-resolved variables
+        # would keep every challenger chunk in memory until the end of the pass: they are cheap on their own.
+        missing_fraction_dataset = missing_fraction_dataset.compute()
+        computed_rmsd_dataset = rmsd_dataset.compute()
+    else:
+        # One computation for the missing fractions and the RMSD of surface quantities, so that the challenger
+        # and the reference are read, and derived quantities such as the mixed layer depth computed, once.
+        missing_fraction_dataset, computed_rmsd_dataset = dask.compute(missing_fraction_dataset, rmsd_dataset)
     return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)
+
+
+def _has_depth_resolved_variable(dataset: xarray.Dataset) -> bool:
+    return any(Dimension.DEPTH.key() in dataset[variable_name].dims for variable_name in dataset.data_vars)
 
 
 def _gridded_dask_configuration() -> dict:
