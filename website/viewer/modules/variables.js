@@ -103,8 +103,31 @@ const SHORT_NAMES = {
   sea_water_speed: "Current speed",
 };
 
+// Chart titles and captions name the variable in full; selectors keep the short form.
+const FULL_NAMES = {
+  sea_water_potential_temperature: "Potential temperature",
+  sea_water_salinity: "Practical salinity",
+};
+
 export function prettyName(standardName) {
+  return FULL_NAMES[standardName] || SHORT_NAMES[standardName] || standardName.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+export function shortName(standardName) {
   return SHORT_NAMES[standardName] || standardName.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+// Observation-based views (all-dates maps, Class IV) compare SSH against along-track sea
+// level anomaly, so they name it that; model-vs-reference views keep prettyName.
+export function obsPrettyName(standardName) {
+  if (standardName === "sea_surface_height_above_geoid") return "Sea level anomaly";
+  return prettyName(standardName);
+}
+
+// Salinity is practical salinity (PSS-78), a dimensionless ratio; the manifests still
+// write "PSU", which is not a unit, so it is shown as no unit at all.
+export function displayUnits(units) {
+  return units === "PSU" || units === "psu" ? "" : units;
 }
 
 export function depthLabel(depth) {
@@ -113,5 +136,5 @@ export function depthLabel(depth) {
 
 export function variableLabel(manifest, key) {
   const entry = manifest.variables[key];
-  return `${prettyName(entry.standard_name)} · ${depthLabel(entry.depth)}`;
+  return `${shortName(entry.standard_name)} · ${depthLabel(entry.depth)}`;
 }

@@ -43,11 +43,11 @@ export async function loadYearRmsd(url) {
 
 // Map a viewer variable key (a manifest standard_name, or a derived currents key)
 // onto the short name used in the year artifacts (SSH, T, S, u, v). Derived current
-// speed maps to the eastward component, captioned honestly by the caller.
+// speed maps to the eastward component u only, labelled "Eastward current (u)".
 const VARIABLE_TO_YEAR = {
   sea_surface_height_above_geoid: { short: "SSH", unit: "m" },
   sea_water_potential_temperature: { short: "T", unit: "°C" },
-  sea_water_salinity: { short: "S", unit: "PSU" },
+  sea_water_salinity: { short: "S", unit: "" }, // practical salinity, unitless
   eastward_sea_water_velocity: { short: "u", unit: "m/s" },
   eastward_sea_water_velocity_15m: { short: "u", unit: "m/s" },
   northward_sea_water_velocity: { short: "v", unit: "m/s" },
@@ -56,11 +56,20 @@ const VARIABLE_TO_YEAR = {
 
 export function yearVariableMapping(variableKey) {
   if (variableKey === "current_speed" || variableKey === "current_speed_15m") {
-    return { short: "u", unit: "m/s", component: "eastward velocity (u)" };
+    return { short: "u", unit: "m/s", component: "Eastward current (u)" };
   }
   const entry = VARIABLE_TO_YEAR[variableKey];
   if (!entry) return null;
   return { ...entry, component: null };
+}
+
+// The builder bins match-ups with floor((lat - lat0) / dlat) (viewer_artifacts.py
+// _grid_cells), so lat0 + i * dlat is the south EDGE of row i. The renderer treats
+// coordinates as cell centres, so pass lat0 + (i + 0.5) * dlat (same for longitude).
+function yearGridCentres(lat0, dlat, nlat, lon0, dlon, nlon) {
+  const latitudes = Array.from({ length: nlat }, (_, i) => lat0 + (i + 0.5) * dlat);
+  const longitudes = Array.from({ length: nlon }, (_, j) => lon0 + (j + 0.5) * dlon);
+  return { latitudes, longitudes };
 }
 
 // Build a renderable field ({data, width, height} + lat/lon axes) from the year
@@ -80,9 +89,7 @@ export function buildYearGeographyField(geography, shortName, leadDay) {
     const value = flat[i];
     data[i] = value == null ? NaN : value;
   }
-  const latitudes = Array.from({ length: nlat }, (_, i) => lat0 + i * dlat);
-  const longitudes = Array.from({ length: nlon }, (_, j) => lon0 + j * dlon);
-  return { field: { data, width: nlon, height: nlat }, latitudes, longitudes };
+  return { field: { data, width: nlon, height: nlat }, ...yearGridCentres(lat0, dlat, nlat, lon0, dlon, nlon) };
 }
 
 function leadArray(record, leadDay) {
@@ -185,9 +192,7 @@ export function buildYearBiasField(geography, shortName, leadDay) {
     const value = flat[i];
     data[i] = value == null ? NaN : value;
   }
-  const latitudes = Array.from({ length: nlat }, (_, i) => lat0 + i * dlat);
-  const longitudes = Array.from({ length: nlon }, (_, j) => lon0 + j * dlon);
-  return { field: { data, width: nlon, height: nlat }, latitudes, longitudes };
+  return { field: { data, width: nlon, height: nlat }, ...yearGridCentres(lat0, dlat, nlat, lon0, dlon, nlon) };
 }
 
 // Symmetric upper bound for the diverging bias scale: the 98th percentile of the finite

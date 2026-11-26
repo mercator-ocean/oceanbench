@@ -129,6 +129,8 @@ import {
   isVelocityFamilyVariable,
   matching15mCurrentVariable,
   prettyName,
+  obsPrettyName,
+  displayUnits,
   variableEntry,
   variableExists,
   variableLabel,
@@ -165,6 +167,8 @@ import {
 const DATASETS_PATH = "./data/datasets.json";
 const DIFFERENCE_COLORMAP = "balance";
 const YEAR_ERROR_COLORMAP = "dense"; // sequential map for time-mean |obs − model|
+// All-dates cells built from fewer match-ups than this are drawn as unobserved ocean.
+const YEAR_MINIMUM_CELL_COUNT = 3;
 const REGION_BOUNDS = {
   ibi: { west: -19.08, east: 5.08, south: 26.17, north: 56.08 },
 };
@@ -216,6 +220,7 @@ async function ensureStore(slug) {
   const manifest = await loadManifest(resolveViewerDataUrl(descriptor.manifest));
   const store = await loadStore(resolveViewerDataUrl(descriptor.store), storeVersion(manifest));
   stores.set(slug, store);
+  for (const entry of Object.values(manifest.variables || {})) entry.units = displayUnits(entry.units);
   manifests.set(slug, manifest);
   return store;
 }
@@ -760,6 +765,21 @@ async function renderPanel(panel) {
   }
 }
 
+// Aligns a partner field onto a target grid for a difference. A coarser target gets the
+// block mean of the finer cells (nearest sampling would alias the fine scales into the
+// difference), as the spectrum path does; a same-resolution or finer target is sampled
+// by nearest cell as before.
+function gridStep(coordinates) {
+  return coordinates.length > 1 ? Math.abs(coordinates[1] - coordinates[0]) : 0;
+}
+
+function alignOntoGrid(field, sourceLat, sourceLon, targetLat, targetLon) {
+  const coarserTarget = gridStep(targetLat) > gridStep(sourceLat) * 1.5;
+  return coarserTarget
+    ? blockAverageOntoGrid(field, sourceLat, sourceLon, targetLat, targetLon)
+    : resampleOntoGrid(field, sourceLat, sourceLon, targetLat, targetLon);
+}
+
 async function readAlignedField(panel, sourceSlug, variable, level, start, leadIndex, targetLat, targetLon) {
   await ensureStore(sourceSlug);
   // The indices arrive in the host panel's store; a partner store is indexed by the same
@@ -773,7 +793,7 @@ async function readAlignedField(panel, sourceSlug, variable, level, start, leadI
   const layer = await readLayer(stores.get(sourceSlug), { variable, level, startIndex: start, leadIndex, signal });
   const coordinates = await loadCoordinates(sourceSlug, level);
   if (!targetLat) return { field: layer, latitudes: coordinates.latitudes, longitudes: coordinates.longitudes };
-  const aligned = resampleOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, targetLat, targetLon);
+  const aligned = alignOntoGrid(layer, coordinates.latitudes, coordinates.longitudes, targetLat, targetLon);
   return { field: aligned, latitudes: targetLat, longitudes: targetLon, compressedBytes: layer.compressedBytes };
 }
 
@@ -821,7 +841,7 @@ async function readStatisticsLayer(slug, variable, leadDay, target = null) {
   const { latitudes, longitudes } = await loadCoordinates(slug, level);
   if (!target) return { field: layer, latitudes, longitudes };
   return {
-    field: resampleOntoGrid(layer, latitudes, longitudes, target.latitudes, target.longitudes),
+    field: alignOntoGrid(layer, latitudes, longitudes, target.latitudes, target.longitudes),
     latitudes: target.latitudes,
     longitudes: target.longitudes,
   };
@@ -1157,6 +1177,14 @@ async function renderYearPanel(panel, token, manifest) {
   if (token !== panel.renderToken) return;
   panel.field = built.field;
   panel.yearCounts = buildYearObservationCounts(geography, mapping.short, shared.leadDay, { bias: biasMode });
+  // A cell with one or two match-ups is not a mean worth colouring: draw it like
+  // unobserved ocean (the legend says so) and keep its count for the hover readout.
+  if (panel.yearCounts && panel.yearCounts.data.length === built.field.data.length) {
+    const counts = panel.yearCounts.data;
+    for (let i = 0; i < counts.length; i += 1) {
+      if (counts[i] < YEAR_MINIMUM_CELL_COUNT) built.field.data[i] = NaN;
+    }
+  }
   // Per-cell bias standard error for the hover readout (bias mode only; null on old artifacts).
   panel.yearBiasSE = biasMode ? buildYearBiasStandardError(geography, mapping.short, shared.leadDay) : null;
   panel.latitudes = built.latitudes;
@@ -1174,10 +1202,9 @@ async function renderYearPanel(panel, token, manifest) {
   panel.yearMetric = shared.yearMetric;
   panel.yearMeta = { nStarts: geography.meta && geography.meta.n_starts, component: mapping.component };
   const entry = variableEntry(manifest, panel.state.variable);
-  const varLabel = entry ? prettyName(entry.standard_name) : panel.state.variable;
-  panel.label =
-    `${shortLabelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}` +
-    (mapping.component ? ` (${mapping.component})` : "");
+  // The currents choice maps onto the eastward component only: name that, not a speed.
+  const varLabel = mapping.component || (entry ? obsPrettyName(entry.standard_name) : panel.state.variable);
+  panel.label = `${shortLabelFor(panel.state.dataset)} · ${biasMode ? "bias" : "mean |obs − model|"} · ${varLabel}`;
 }
 
 const yearLandMaskCache = new Map();
@@ -2232,9 +2259,9 @@ async function updateColumnModeAvailability() {
 function columnVariableFor(panel) {
   const entry = variableEntry(manifestFor(panel.state.dataset), panel.state.variable);
   const standardName = entry && entry.standard_name;
-  if (standardName === "sea_water_salinity") return { name: standardName, unit: entry.units || "", label: "Salinity" };
-  if (standardName === "sea_water_potential_temperature") return { name: standardName, unit: entry.units || "°C", label: "Temperature" };
-  return { name: "sea_water_potential_temperature", unit: "°C", label: "Temperature" };
+  if (standardName === "sea_water_salinity") return { name: standardName, unit: entry.units || "", label: "Practical salinity" };
+  if (standardName === "sea_water_potential_temperature") return { name: standardName, unit: entry.units || "°C", label: "Potential temperature" };
+  return { name: "sea_water_potential_temperature", unit: "°C", label: "Potential temperature" };
 }
 
 function clearColumnProfile() {
@@ -3101,6 +3128,9 @@ function updatePanelReadout(panel, lat, lon, suffix = "", source = panel, prefix
 
 function fieldReadoutValue(panel, value, count, standardError) {
   if (shared.scope === SCOPE_WHOLE_YEAR) {
+    if (Number.isFinite(count) && count > 0 && count < YEAR_MINIMUM_CELL_COUNT) {
+      return `fewer than ${YEAR_MINIMUM_CELL_COUNT} observations · n = ${count}`;
+    }
     if (!Number.isFinite(value) || count === 0) return "no observations";
     const biasMode = panel.yearMetric === YEAR_METRIC_BIAS;
     // Non-bias year cells are the time-mean |obs − model| (MAE), matching the panel title
@@ -3345,7 +3375,7 @@ function updateYearLegend(visible) {
   if (!visible) return;
   legend.innerHTML =
     `<span class="item"><span class="swatch" style="background:${rgbCss(landColor(shared.theme))}"></span>land</span>` +
-    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, no observations</span>` +
+    `<span class="item"><span class="swatch" style="background:${rgbCss(noObsColor(shared.theme))}"></span>ocean, fewer than ${YEAR_MINIMUM_CELL_COUNT} observations</span>` +
     (activePeriodRange() ? `<span class="item">${PERIOD_NOT_APPLIED}</span>` : "");
   // Colorbar-adjacent method note for the year raster (the colorbar itself is a canvas).
 }
@@ -3384,11 +3414,10 @@ function updateSharedColorbar() {
     scalePanels.forEach((candidate, index) => {
       if (!candidate.colormap || !candidate.range) return;
       const nStarts = candidate.yearMeta && candidate.yearMeta.nStarts;
-      const biasMode = candidate.yearMetric === YEAR_METRIC_BIAS;
       canvases[index].hidden = false;
       drawColorbar(canvases[index], candidate.colormap, candidate.range, {
         // Dataset and variable are in the panel head; the bar says only what is averaged.
-        label: `${prefixFor(candidate)}${biasMode ? "model − obs" : "|obs − model|"}, mean of ${nStarts || "?"} starts`,
+        label: `${prefixFor(candidate)}${candidate.yearMeta && candidate.yearMeta.component ? `${candidate.yearMeta.component}, pooled` : "Pooled"} over all match-ups of ${nStarts || "?"} starts`,
         units: candidate.units,
         textColor,
       });
@@ -3831,7 +3860,7 @@ async function renderRailYearRmsd(shown) {
     const yearBin = depthBinLabel(yearManifest && variableEntry(yearManifest, panel.state.variable), entry.depthBin);
     if (yearBin) yearBins.add(yearBin);
     lines.push({
-      label: `${labelFor(panel.state.dataset)}${mapping.component ? " · u" : ""}`,
+      label: `${labelFor(panel.state.dataset)}${mapping.component ? ` · ${mapping.component}` : ""}`,
       color: forecastColor(panel.index),
       panelIndex: panel.index,
       dates: entry.dates,
@@ -3851,8 +3880,8 @@ async function renderRailYearRmsd(shown) {
   const bandNote = !lines.some((line) => line.ciLow)
     ? ""
     : biasMode
-      ? "Band: 95%, mean ± 1.96 sd/√n, a lower bound (obs are correlated). "
-      : "Band: 95%, a lower bound (obs are correlated). ";
+      ? "Band: 95% per start, block bootstrap over 5° boxes of obs (2° for IBI). "
+      : "95 % band, likely too narrow (observations are correlated). ";
   note.textContent = lines.length
     ? `${period ? `${period.label}. ` : ""}${bandNote}Click a point to open that date.`
     : biasMode
@@ -3979,7 +4008,8 @@ function prettyVariable(panel) {
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
   if (isCurrentsVariable(panel.state.variable)) return `currents (${currentsDepthLabel(panel.state.variable)})`;
-  return entry ? `${prettyName(entry.standard_name)} · ${depthLabel(entry.depth)}` : panel.state.variable;
+  const name = panel.yearMeta ? obsPrettyName : prettyName;
+  return entry ? `${name(entry.standard_name)} · ${depthLabel(entry.depth)}` : panel.state.variable;
 }
 
 // Display names of the rail's score references.
@@ -4016,7 +4046,7 @@ function skillSeries(panel) {
     if (depthKeys.length && !depthKeys.includes(row.depth)) continue;
     if (row.challenger !== challenger) continue;
     if (shared.region && row.region && row.region !== shared.region) continue;
-    unit = row.unit || unit;
+    unit = displayUnits(row.unit || unit);
     rowsByVariable.get(row.variable).push(row);
   }
   for (const rows of rowsByVariable.values()) for (const row of rows) starts = Math.max(starts, Number(row.n_starts) || 0);
@@ -4080,7 +4110,7 @@ function renderRailSkill(shown, comparison) {
         );
         continue;
       }
-      unit = skill.unit || unit;
+      unit = displayUnits(skill.unit || unit);
       if (skill.binLabel) binLabels.add(skill.binLabel);
       for (const [variable, rows] of skill.rowsByVariable) {
         if (!rows.length) continue;
@@ -4692,10 +4722,12 @@ async function renderRailPsd(shown, comparison) {
       ? `⚠ ${Math.round(landFraction * 100)}% land: damped by fill; use an open-ocean box. `
       : "";
   const readout = elements["rail-psd-readout"];
-  readout.hidden = !Number.isFinite(scaleKm);
+  readout.hidden = !(Number.isFinite(scaleKm) || referenceLabel);
   readout.textContent = Number.isFinite(scaleKm)
     ? `${forecastLabel} matches ${referenceLabel} for features larger than ${scaleKm} km at lead ${shared.leadDay}.`
-    : "";
+    : referenceLabel
+      ? `${forecastLabel} and ${referenceLabel}: no crossing in this box at lead ${shared.leadDay}.`
+      : "";
   elements["rail-psd-note"].textContent = curves.length
     ? `${landWarning}Box ${box.w.toFixed(1)}° × ${box.h.toFixed(1)}°${oceanLabel} · ${gridLabels.join(" & ")} grid`
     : "Move the box over ocean to compute a spectrum (boxed area is mostly land).";
@@ -4769,7 +4801,12 @@ async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, bo
     const rows = [...values.entries()]
       .filter(([, metres]) => Number.isFinite(metres))
       .map(([leadDay, metres]) => ({ lead_day: leadDay, mean: metres / 1000 }));
-    elements["rail-psd-lead"].innerHTML = rows.length
+    // Leads whose ratio never crosses one half are said so, not silently dropped.
+    const noCrossing = [...values.entries()].filter(([, metres]) => !Number.isFinite(metres)).map(([leadDay]) => leadDay);
+    const noCrossingNote = noCrossing.length
+      ? `<p class="rail-caption">${rows.length ? `Lead ${noCrossing.join(", ")}: ` : `Disagreement with ${escapeHtml(referenceLabel)}: `}no crossing in this box.</p>`
+      : "";
+    elements["rail-psd-lead"].innerHTML = (rows.length
       ? leadCurveSVG(new Map([["reference", rows]]), {
           title: `Smallest scale in agreement with ${referenceLabel} by lead day`,
           unit: "km",
@@ -4779,7 +4816,7 @@ async function renderPsdLeadSweep(token, sources, boxRange, boxViewport, box, bo
           labels: new Map([["reference", `vs ${referenceLabel}`]]),
           legend: false,
         }) + `<p class="rail-caption">Smaller means the forecast keeps finer detail in common with ${referenceLabel}.</p>`
-      : "";
+      : "") + noCrossingNote;
     if (rows.length) wireCursorTooltip(elements["rail-psd-lead"]);
   };
   draw();
@@ -4935,7 +4972,7 @@ function class4SelectionNote() {
   if (!panel) return "No Class IV match-ups for this selection.";
   const manifest = manifestFor(panel.state.dataset);
   const entry = manifest && variableEntry(manifest, panel.state.variable);
-  const variable = entry ? prettyName(entry.standard_name) : panel.state.variable;
+  const variable = entry ? obsPrettyName(entry.standard_name) : panel.state.variable;
   return `No ${variable} match-ups at ${class4DepthLabel(entry, class4DepthBin(entry))} for this start/lead.`;
 }
 
