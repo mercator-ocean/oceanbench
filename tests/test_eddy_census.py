@@ -491,7 +491,10 @@ def fake_py_eddy_tracker_on_disk(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(site)
     for name in [name for name in sys.modules if name.startswith("py_eddy_tracker")]:
         monkeypatch.delitem(sys.modules, name)
-    return log_path
+    yield log_path
+    # The fake package imported from disk during the test must not outlive it: later tests would find it.
+    for name in [name for name in sys.modules if name.startswith("py_eddy_tracker")]:
+        del sys.modules[name]
 
 
 def _varied_fields(count: int) -> list:
