@@ -10,3 +10,19 @@ $primary: #046293;
 $link-color: $primary;
 $body-bg: #fafaf7;
 $body-color: #333940;
+
+/* Site header: a near-white bar with dark text; the brand blue marks the active page. */
+$navbar-bg: #ffffff;
+$navbar-fg: $body-color;
+$navbar-hl: $primary;
+
+/*-- scss:rules --*/
+
+.navbar {
+  border-bottom: 1px solid $border-color;
+}
+
+.navbar .navbar-nav .nav-link:hover,
+.navbar .navbar-nav .nav-link:focus {
+  color: $primary;
+}

@@ -1,0 +1,125 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* Viewport and container queries, last in load order. Breakpoints are in em because
+   custom properties cannot appear in a media condition (1em is the 16 unit root size:
+   47.5em, 82.5em, 68.75em and 50em are 760, 1320, 1100 and 800). */
+
+@media (max-height: 47.5em) {
+  .controls { gap: var(--s3); padding: var(--s3); }
+  .drawer-right .drawer-body { padding: var(--s3); }
+}
+
+@media (max-width: 82.5em) {
+  .panel-head { gap: var(--s1) var(--s2); flex-wrap: wrap; }
+  .panel-head .spacer { flex: 1 0 0; }
+}
+
+/* Narrow viewports: the drawers float over the map as sheets. */
+@media (max-width: 68.75em) {
+  .workspace { grid-template-columns: 0 minmax(0, 1fr) var(--drawer-tab-width); }
+  .drawer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: var(--ob-z-sheet);
+    box-shadow: var(--sheet-shadow);
+  }
+  .drawer-left { left: 0; width: var(--controls-open-width); }
+  .drawer-right { right: 0; width: var(--rail-open-width); }
+  .drawer.collapsed { width: var(--drawer-tab-width); box-shadow: none; }
+  .drawer-resizer { display: none; }
+  .drawer.collapsed > .drawer-tab { align-content: center; gap: var(--s2); }
+  .drawer.collapsed > .drawer-tab::after {
+    content: attr(data-label);
+    writing-mode: vertical-rl;
+    font-size: var(--text-sm);
+    letter-spacing: var(--ob-tracking-label);
+  }
+  .drawer-left.collapsed > .drawer-tab::after { transform: rotate(180deg); }
+}
+
+@media (max-width: 50em) {
+  .panel-grid[data-layout="2"][data-display="side"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    column-gap: 0;
+    row-gap: var(--hairline);
+  }
+  .header-actions { gap: var(--s2); }
+  .control-bar { gap: var(--s2); }
+  .control-bar select { max-width: var(--ob-viewer-phone-select-dataset); }
+  .bar-forecasts .layout-switch .ghost-button,
+  .control-bar .display-switch .ghost-button { padding: 0 var(--s2); }
+}
+
+/* The map column decides the dock layout. Medium: colour bar narrows. */
+@container (max-width: 56em) {
+  .map-dock { column-gap: var(--s4); }
+  .dock-scale { width: var(--ob-viewer-colorbar-width-md); }
+}
+/* Narrow: two rows, controls on top, colour bar and legend below. */
+@container (max-width: 44em) {
+  .map-dock { grid-template-columns: auto minmax(0, 1fr); }
+  .dock-scale { width: var(--ob-viewer-colorbar-width-sm); }
+}
+/* Phone: the legend takes a full row under the scale. */
+@container (max-width: 27em) {
+  .map-dock { grid-template-columns: minmax(0, 1fr); }
+  .dock-playback { justify-content: space-between; }
+  .dock-scale { width: 100%; }
+}
+
+/* Phone: forecasts on the first rows, then Variable and Filters; the rest opens in
+   place under Filters, and the scores open as a bottom sheet from Scores. */
+@media (max-width: 50em) {
+  .control-bar { flex-wrap: wrap; row-gap: var(--s2); column-gap: var(--s2); padding: var(--s2) var(--s4); }
+  .bar-forecasts { flex: 1 0 100%; flex-wrap: wrap; }
+  .bar-forecasts .display-switch { order: 4; }
+  .bar-variable { flex: 1 1 0; }
+  .bar-variable select { width: 100%; max-width: none; }
+  .bar-filters, .bar-scores { display: inline-flex; align-items: center; }
+  .bar-dates, .bar-end > :not(.bar-scores) { display: none; }
+  .bar-end { margin-left: 0; }
+  .control-bar.filters-open .bar-dates { display: flex; flex: 1 0 100%; flex-wrap: wrap; order: 10; }
+  .control-bar.filters-open .bar-end > .bar-more,
+  .control-bar.filters-open .bar-end > .bar-chip:not([hidden]),
+  .control-bar.filters-open .bar-end > #about-toggle { display: inline-flex; }
+  .control-bar.filters-open .bar-end { flex: 1 0 100%; order: 11; flex-wrap: wrap; }
+  .control-bar.filters-open .bar-end > .bar-scores { display: none; }
+  .app-bar { flex-wrap: nowrap; padding: var(--s1) var(--s4); }
+  .app-bar .title { display: none; }
+  .header-utility .ghost-button { padding: 0 var(--s2); }
+  .bar-more-menu { left: 0; right: auto; }
+  .map-key { max-width: calc(100% - var(--s4)); }
+  .map-key .dock-scale { width: var(--ob-viewer-colorbar-width-sm); }
+  .map-dock { grid-template-columns: auto minmax(0, 1fr); }
+  .dock-lead { flex-wrap: nowrap; }
+  .dock-lead .lead-value { min-width: 0; }
+  .drawer-right {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: 70vh;
+    border-left: 0;
+    border-top: var(--hairline) solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .drawer-right.collapsed { display: none; }
+  .workspace { grid-template-columns: 0 minmax(0, 1fr) 0; }
+  .drawer-right .drawer-tab {
+    top: var(--s2);
+    right: var(--s2);
+    left: auto;
+    transform: none;
+    border: var(--hairline) solid var(--border);
+    border-radius: var(--radius);
+  }
+  .drawer-right .drawer-tab::before { content: "\2715"; }
+}

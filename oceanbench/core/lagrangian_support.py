@@ -37,8 +37,10 @@ def surface_current_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
         ]
     ]
     if Dimension.DEPTH.key() in current_dataset.dims:
-        return current_dataset.isel({Dimension.DEPTH.key(): 0}, drop=True)
-    return current_dataset
+        current_dataset = current_dataset.isel({Dimension.DEPTH.key(): 0}, drop=True)
+    # Load the surface currents once. Parcels otherwise computes one time slice at a time from the lazy
+    # remote dataset, and each compute walks the whole dask graph (millions of tasks for twelfth-degree GLORYS).
+    return current_dataset.load()
 
 
 def _first_day_datetime_of_week_dataset(dataset: xarray.Dataset) -> str:

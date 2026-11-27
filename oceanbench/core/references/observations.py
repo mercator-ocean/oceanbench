@@ -319,16 +319,16 @@ def observations_by_start(challenger_dataset: Dataset) -> Iterator[Dataset]:
     window are opened with the next one, which also holds observations of the last day of the window, within
     the days of ``observations(challenger_dataset)``.
     """
-    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
-    _require_available_observations(first_day_datetimes)
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()]
+    _require_available_observations(first_day_datetimes.values)
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
-    last_observation_day = _last_forecast_day(first_day_datetimes.max(), lead_days_count)
+    last_observation_day = _last_forecast_day(first_day_datetimes.values.max(), lead_days_count)
     return (
         _observations(
-            first_day_datetimes[[start_index]],
+            first_day_datetimes.values[[start_index]],
             lead_days_count,
             min(
-                _last_forecast_day(first_day_datetimes[start_index], lead_days_count)
+                _last_forecast_day(first_day_datetimes.values[start_index], lead_days_count)
                 + pandas.Timedelta(days=OBSERVATION_FILE_DAYS_AFTER_OBSERVATION_DAY),
                 last_observation_day,
             ),

@@ -68,6 +68,29 @@ _GLO12_PERSISTENCE = {
     "resolution": "1/12°",
 }
 
+_CLIMATOLOGY = {
+    "label": "Climatology",
+    "url": "https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030",
+    "organisation": "Mercator Ocean",
+    "organisation_url": "https://mercator-ocean.eu",
+    "method": "Baseline",
+    "forecast_type": "GLORYS 1993-2019 day-of-year mean",
+    "initial_conditions": "None",
+    "resolution": "1/4°",
+}
+
+_GLORYS = {
+    "label": "GLORYS reanalysis",
+    "url": "https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030",
+    "organisation": "Mercator Ocean",
+    "organisation_url": "https://mercator-ocean.eu",
+    "note": "A reanalysis that assimilates observations, shown as a reference, not a forecast.",
+    "method": "Reference",
+    "forecast_type": "Reanalysis",
+    "initial_conditions": "Not applicable",
+    "resolution": "1/4°",
+}
+
 _HCLIMREP = {
     "label": "HClimRep",
     "url": "https://arxiv.org/abs/2609.28601",
@@ -96,6 +119,10 @@ CHALLENGERS = {
     "glo12_persistence_1_degree": {**_GLO12_PERSISTENCE, "resolution": "1°"},
     "hclimrep": _HCLIMREP,
     "hclimrep_1_degree": {**_HCLIMREP, "resolution": "1°"},
+    "climatology": _CLIMATOLOGY,
+    "climatology_1_degree": {**_CLIMATOLOGY, "resolution": "1°"},
+    "glorys": _GLORYS,
+    "glorys_1_degree": {**_GLORYS, "resolution": "1°"},
 }
 
 
@@ -105,7 +132,7 @@ def challenger_label(challenger_name: str) -> str:
 
 def challenger_category(challenger_name: str) -> str:
     method = CHALLENGERS.get(challenger_name, {}).get("method")
-    return "baseline" if method == "Baseline" else "model"
+    return {"Baseline": "baseline", "Reference": "reference"}.get(method, "model")
 
 
 def challenger_note(challenger_name: str) -> str | None:

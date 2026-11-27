@@ -1,0 +1,158 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* Part of the viewer stylesheet, loaded after shell.css and before responsive.css.
+   The data-attribute contract app.js writes is documented at the head of shell.css.
+   Every value comes from tokens.css. */
+
+.context-rail[hidden] { display: none; }
+.drawer-right .drawer-body { padding: var(--pad) var(--pad) var(--s5); }
+#rail-subtitle { display: none; }
+
+/* Rail title matches the left panel's section labels; chart titles are the one
+   larger step, so the hierarchy reads label, title, caption. */
+.rail-title { display: none; }
+.rail-section h3 {
+  font-size: var(--text-lg);
+  font-weight: var(--w-strong);
+  color: var(--text);
+  margin: 0 0 var(--s2);
+}
+.rail-subtitle { font-size: var(--text-sm); color: var(--muted); margin: 0 0 var(--s2); line-height: var(--ob-line-body); }
+#rail-subtitle:empty { display: none; }
+.rail-caption:empty { display: none; }
+.chart-title-unit { font-weight: var(--w-strong); }
+.chart-title-n { font-weight: var(--w-regular); font-size: var(--text-sm); color: var(--muted); margin-left: var(--s1); }
+.chart-title-n:empty { display: none; }
+#rail-provenance { min-height: calc(2lh + var(--s3)); }
+.rail-current-depth-note {
+  margin: 0 0 var(--group-gap);
+  padding: var(--s3);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+}
+.rail-current-depth-note p { margin: 0 0 var(--s2); font-size: var(--text-sm); line-height: var(--ob-line-body); color: var(--muted); }
+
+/* 32 px (space-6) between chart blocks. */
+.rail-section { margin-bottom: var(--s6); display: flex; flex-direction: column; gap: var(--s2); }
+.rail-section > * { margin-top: 0; margin-bottom: 0; }
+.rail-section > [hidden] { display: none; }
+.rail-section h3 { margin: 0; }
+.rail-card-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s2); }
+.rail-card-heading h3 { margin-bottom: 0; }
+.rail-section.psd-disabled .rail-chart-slot,
+.rail-section.psd-disabled .rail-caption { display: none; }
+.rail-psd-readout { font-size: var(--text-md); color: var(--text); }
+.rail-psd-readout[hidden] { display: none; }
+.psd-hide { border: 0; background: transparent; padding: 0; font: inherit; font-size: var(--text-sm); color: var(--muted); cursor: pointer; }
+.psd-hide:hover { color: var(--text); text-decoration: underline; }
+.psd-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  width: 100%;
+  aspect-ratio: 360 / 220;
+  padding: var(--s4);
+  font: inherit;
+  color: var(--muted);
+  background: transparent;
+  border: var(--hairline) dashed var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.psd-placeholder[hidden] { display: none; }
+.psd-placeholder:hover { border-color: var(--accent); }
+.psd-placeholder-note { font-size: var(--text-sm); text-align: center; }
+.psd-placeholder-action {
+  padding: var(--s1) var(--s3);
+  font-size: var(--text-md);
+  font-weight: var(--w-strong);
+  color: var(--text);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.psd-placeholder:hover .psd-placeholder-action { border-color: var(--accent); color: var(--accent); }
+.rail-reference-row { display: flex; align-items: center; gap: var(--s2); margin: 0 0 var(--s2); }
+.rail-reference-row .rail-skill-reference { margin: 0; }
+.trajectory-card { padding-left: var(--s3); box-shadow: inset var(--ob-viewer-accent-rule) 0 0 var(--forecast-color, var(--muted)); }
+.trajectory-label { margin: var(--s1) 0 var(--s2); color: var(--text); font-size: var(--text-md); font-weight: var(--w-strong); }
+.trajectory-clear { border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: var(--text-md); padding: 0 var(--s1); }
+.trajectory-clear:hover { color: var(--text); text-decoration: underline; }
+.rail-forecast-toggle { display: inline-flex; margin: 0 0 var(--group-gap); }
+.rail-forecast-toggle[hidden] { display: none; }
+.rail-skill-reference { margin: 0 0 var(--s2); }
+#rail-skill-reference-note { margin: 0 0 var(--s1); }
+
+.rail-caption { font-size: var(--text-sm); color: var(--muted); margin: 0; line-height: var(--ob-line-body); }
+.rail-provenance { font-size: var(--text-sm); color: var(--muted); margin: var(--group-gap) 0 0; padding-top: var(--s3); border-top: var(--hairline) solid var(--border); line-height: var(--ob-line-body); }
+.rail-provenance .method-note-btn { vertical-align: baseline; }
+
+/* Rail charts are viewBox-scaled SVG; the label size divides the scale back out so
+   type stays at the chart text size whatever the slot measures. */
+.rail-chart-slot {
+  width: 100%;
+  --chart-view-width: 360;
+  --chart-slot-width: 360;
+}
+.rail-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  --chart-type-scale: calc(var(--chart-view-width) / var(--chart-slot-width));
+  --chart-text: var(--ob-viewer-chart-text);
+}
+.rail-chart .axis { stroke: var(--control-border); stroke-width: 1; }
+.rail-chart .grid { stroke: var(--grid-line); stroke-width: 1; }
+.rail-chart .tick,
+.rail-chart .axis-label,
+.rail-chart .empty,
+.rail-chart .chart-tooltip text,
+.rail-chart .chart-lead-readout text { fill: var(--muted); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
+.rail-chart .legend { fill: var(--text); font-size: calc(var(--chart-text) * var(--chart-type-scale)); }
+.rail-chart .chart-tooltip text { fill: var(--text); }
+.rail-chart .heading-suffix { fill: var(--muted); }
+.rail-chart .chart-lead-readout text { fill: var(--text); }
+.rail-chart .chart-point { fill: transparent; stroke: none; pointer-events: all; cursor: crosshair; }
+.rail-chart .chart-crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.rail-chart .chart-tooltip { pointer-events: none; }
+.rail-chart .chart-tooltip rect { fill: var(--surface); stroke: var(--border); }
+.rail-chart .chart-lead-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.6; pointer-events: none; }
+.rail-chart .chart-lead-marker { fill: var(--text); stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
+.rail-chart .chart-lead-readout { pointer-events: none; }
+.rail-chart .chart-lead-readout rect { fill: var(--surface); stroke: var(--control-border); stroke-width: 1; }
+
+.hint-details { margin: 0; }
+.hint-details > summary { list-style: none; }
+.hint-details > summary::-webkit-details-marker { display: none; }
+.hint-details > summary::before { content: "? "; font-weight: var(--w-strong); }
+.hint-details[open] > summary::before { content: "\00D7  "; }
+
+.about-dialog {
+  max-width: var(--ob-viewer-dialog-max);
+  width: calc(100% - var(--s6));
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--s5);
+}
+.about-dialog::backdrop { background: var(--ob-viewer-backdrop); }
+.about-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); margin-bottom: var(--s2); }
+.about-dialog-head h2 { margin: 0; font-size: var(--text-lg); }
+.about-dialog p { color: var(--muted); font-size: var(--text-md); line-height: var(--ob-line-body); margin: 0; }
+.about-dialog a { color: var(--text); }
+.about-glossary { margin: var(--s3) 0 0; font-size: var(--text-md); }
+.about-glossary dt { font-weight: var(--w-strong); margin-top: var(--s2); }
+.about-glossary dd { margin: var(--s1) 0 0; color: var(--muted); }
+
+.rail-example-note { margin: 0 0 var(--s3); font-size: var(--text-sm); color: var(--muted); line-height: var(--ob-line-body); }
+.rail-example-note[hidden] { display: none; }

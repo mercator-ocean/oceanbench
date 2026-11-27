@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import os
+from collections.abc import Callable
 
 import dask
 import numpy
@@ -197,7 +198,15 @@ def _missing_fractions(
     )
 
 
-def _rmsd(
+def _missing_fractions_computed_first_when_depth_resolved(missing_fraction_dataset: xarray.Dataset) -> xarray.Dataset:
+    has_depth_resolved_variable = any(
+        Dimension.DEPTH.key() in missing_fraction_dataset[variable_name].dims
+        for variable_name in missing_fraction_dataset.data_vars
+    )
+    return missing_fraction_dataset.compute() if has_depth_resolved_variable else missing_fraction_dataset
+
+
+def _rmsd_by_start(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     ocean_mask: xarray.DataArray,
@@ -208,7 +217,19 @@ def _rmsd(
     area_weighted_mean_squared_error = squared_error.weighted(_spatial_area_weights(squared_error)).mean(
         dim=[Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
     )
-    return numpy.sqrt(area_weighted_mean_squared_error).mean(dim=Dimension.FIRST_DAY_DATETIME.key())
+    return numpy.sqrt(area_weighted_mean_squared_error)
+
+
+def _mean_over_starts(rmsd_by_start_dataset: xarray.Dataset) -> xarray.Dataset:
+    return rmsd_by_start_dataset.mean(dim=Dimension.FIRST_DAY_DATETIME.key())
+
+
+def _rmsd(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
+) -> xarray.Dataset:
+    return _mean_over_starts(_rmsd_by_start(challenger_dataset, reference_dataset, ocean_mask))
 
 
 def _has_depths(dataset: xarray.Dataset, variable_name: str) -> bool:
@@ -285,12 +306,61 @@ def _select_variables(dataset: xarray.Dataset, variables: list[Variable]) -> xar
     return dataset[[variable.key() for variable in variables]]
 
 
+def _lazy_rmsd(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    variables: list[Variable],
+    ocean_mask: xarray.DataArray,
+    keep_start_tables: bool = False,
+) -> tuple[tuple, Callable[[tuple], pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]]]:
+    """The lazy datasets of ``rmsd`` and the function that makes its result from them once computed."""
+    prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
+    prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
+        prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
+    )
+    challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
+    missing_fraction_dataset = _missing_fractions_computed_first_when_depth_resolved(
+        _missing_fractions(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask)
+    )
+    if not keep_start_tables:
+
+        def table(computed: tuple) -> pandas.DataFrame:
+            computed_missing_fraction_dataset, computed_rmsd_dataset = computed
+            return _to_pretty_dataframe(computed_rmsd_dataset, variables, computed_missing_fraction_dataset)
+
+        lazy_rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask)
+        return (missing_fraction_dataset, lazy_rmsd_dataset), table
+
+    rmsd_by_start_dataset = _rmsd_by_start(
+        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
+    )
+
+    def tables(computed: tuple) -> tuple[pandas.DataFrame, list[pandas.DataFrame]]:
+        computed_missing_fraction_dataset, computed_rmsd_dataset, computed_rmsd_by_start_dataset = computed
+        start_tables = [
+            _to_pretty_dataframe(
+                computed_rmsd_by_start_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): start_index}),
+                variables,
+                computed_missing_fraction_dataset,
+            )
+            for start_index in range(computed_rmsd_by_start_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()])
+        ]
+        return (
+            _to_pretty_dataframe(computed_rmsd_dataset, variables, computed_missing_fraction_dataset),
+            start_tables,
+        )
+
+    # The same graph for the mean as without start tables.
+    return (missing_fraction_dataset, _mean_over_starts(rmsd_by_start_dataset), rmsd_by_start_dataset), tables
+
+
 def rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     variables: list[Variable],
     ocean_mask: xarray.DataArray,
-) -> pandas.DataFrame:
+    keep_start_tables: bool = False,
+) -> pandas.DataFrame | tuple[pandas.DataFrame, list[pandas.DataFrame]]:
     """
     Area-weighted gridded RMSD over the ocean cells of the OceanBench ocean mask.
 
@@ -298,35 +368,36 @@ def rmsd(
     is ocean and both the challenger and the reference have a value. Ocean cells where the reference
     has a value and the challenger has none are not scored: the Missing fraction column reports their
     area-weighted share.
+
+    The score is the mean over start dates of the RMSD of each start date. With ``keep_start_tables``,
+    the table of each start date is also returned, in start date order, from the same computation.
+    Their Missing fraction column is the one of all start dates.
     """
+    return rmsd_together(
+        [
+            dict(
+                challenger_dataset=challenger_dataset,
+                reference_dataset=reference_dataset,
+                variables=variables,
+                ocean_mask=ocean_mask,
+                keep_start_tables=keep_start_tables,
+            )
+        ]
+    )[0]
+
+
+def rmsd_together(rmsd_arguments: list[dict]) -> list:
+    """
+    ``rmsd(**arguments)`` of each item, computed in one pass: the RMSD of all items, and the missing fractions
+    of surface quantities, are computed together, so that what they share (the challenger, or a quantity derived
+    from it such as the mixed layer depth) is read and computed once instead of once per item and per table.
+    The missing fractions of depth-resolved variables are cheap and computed before, on their own: computed
+    together with the RMSD at 1/12 degree, they keep every challenger chunk in memory until the end of the pass.
+    """
+    lazy_results = [_lazy_rmsd(**arguments) for arguments in rmsd_arguments]
     with dask.config.set(_gridded_dask_configuration()):
-        return _rmsd_with_configured_dask(challenger_dataset, reference_dataset, variables, ocean_mask)
-
-
-def _rmsd_with_configured_dask(challenger_dataset, reference_dataset, variables, ocean_mask) -> pandas.DataFrame:
-    prepared_challenger_dataset = _select_variables(_harmonise_dataset(challenger_dataset), variables)
-    prepared_reference_dataset = _snap_reference_spatial_coordinates_to_challenger(
-        prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
-    )
-    challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
-    missing_fraction_dataset = _missing_fractions(
-        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
-    )
-    rmsd_dataset = _rmsd(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask)
-    if _has_depth_resolved_variable(missing_fraction_dataset):
-        # Computed together with the RMSD at 1/12 degree, the missing fractions of depth-resolved variables
-        # would keep every challenger chunk in memory until the end of the pass: they are cheap on their own.
-        missing_fraction_dataset = missing_fraction_dataset.compute()
-        computed_rmsd_dataset = rmsd_dataset.compute()
-    else:
-        # One computation for the missing fractions and the RMSD of surface quantities, so that the challenger
-        # and the reference are read, and derived quantities such as the mixed layer depth computed, once.
-        missing_fraction_dataset, computed_rmsd_dataset = dask.compute(missing_fraction_dataset, rmsd_dataset)
-    return _to_pretty_dataframe(computed_rmsd_dataset, variables, missing_fraction_dataset)
-
-
-def _has_depth_resolved_variable(dataset: xarray.Dataset) -> bool:
-    return any(Dimension.DEPTH.key() in dataset[variable_name].dims for variable_name in dataset.data_vars)
+        computed = dask.compute(*[lazy_datasets for lazy_datasets, _ in lazy_results])
+    return [make_result(computed_datasets) for (_, make_result), computed_datasets in zip(lazy_results, computed)]
 
 
 def _gridded_dask_configuration() -> dict:
@@ -336,4 +407,3 @@ def _gridded_dask_configuration() -> dict:
     """
     workers = os.environ.get("OCEANBENCH_GRIDDED_DASK_WORKERS")
     return {"num_workers": int(workers)} if workers else {}
-

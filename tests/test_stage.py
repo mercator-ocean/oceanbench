@@ -64,12 +64,12 @@ def _record_asset_openers(monkeypatch, module, opened_assets: set) -> None:
         monkeypatch.setattr(module, opener_name, record_reference)
     for opener_name in START_REFERENCE_OPENER_NAMES:
 
-        def record_start_reference(challenger_dataset, opener_name=opener_name):
+        def record_start_references(challenger_dataset, opener_name=opener_name):
             assert current_runtime_configuration().staged_components == (STAGE_ALL_KEY,)
             opened_assets.add(_asset_key(opener_name, challenger_dataset))
             return iter([])
 
-        monkeypatch.setattr(module, opener_name, record_start_reference)
+        monkeypatch.setattr(module, opener_name, record_start_references)
     monkeypatch.setattr(module, "ocean_mask", lambda: opened_assets.add(("ocean_mask",)))
 
 
@@ -96,8 +96,8 @@ def test_stage_command_stages_every_asset_and_computes_nothing(challenger_file, 
     )
     for metric_computation in (
         "rmsd",
-        "rmsd_class4_validation",
-        "rmsd_class4_validation_by_start",
+        "class4_rmsd_and_matchups",
+        "class4_rmsd_and_matchups_by_start",
         "deviation_of_lagrangian_trajectories",
     ):
         monkeypatch.setattr(core_metrics, metric_computation, _forbid)
@@ -132,14 +132,14 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     _record_asset_openers(monkeypatch, core_metrics, metric_assets)
     for computation in (
         "rmsd",
-        "rmsd_class4_validation",
-        "rmsd_class4_validation_by_start",
         "deviation_of_lagrangian_trajectories",
         "compute_mixed_layer_depth",
         "compute_geostrophic_currents",
         "_lagrangian_particle_count",
     ):
         monkeypatch.setattr(core_metrics, computation, lambda *args, **kwargs: None)
+    monkeypatch.setattr(core_metrics, "class4_rmsd_and_matchups", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(core_metrics, "class4_rmsd_and_matchups_by_start", lambda *args, **kwargs: (None, None))
     challenger_namespace: dict = {}
     exec(CHALLENGER_CODE, challenger_namespace)
     metric_functions = [
@@ -150,7 +150,7 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     for metric_function in metric_functions:
         metric_function(challenger_namespace["challenger_dataset"])
 
-    assert len(metric_functions) == 9
+    assert len(metric_functions) == 10
     assert metric_assets == staged_assets
 
 

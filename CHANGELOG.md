@@ -18,6 +18,22 @@ A challenger added or a challenger's forecasts refreshed does not bump the versi
 recorded as a dated bullet under a **Challengers** heading in the current version's section,
 and the affected reports are re-published (never silently overwritten).
 
+## Unreleased
+
+**Scores:** unchanged vs 0.7.0.
+
+### Added
+
+- `climatology` and `glorys` challenger functions, each with a 1 degree version, and their `challenger_datasets/` files. The climatology is a baseline (GLORYS 1993-2019 day-of-year mean) and GLORYS a reference (a reanalysis that assimilates observations), not forecasts. The viewer manifest and `datasets.json` give each challenger an optional `kind`: `model`, `baseline` or `reference`. Class IV SLA of the GLORYS and climatology challengers uses a GLORYS datum shift (-0.0646 m, the -0.1148 m GLO12 shift plus the 0.0502 m 2024 global-mean SSH difference GLORYS minus GLO12); every other challenger keeps -0.1148 m. `year-rmsd-by-start.json` adds `rmsd_centred`, the RMSD with the per-start, per-lead bias removed.
+- `oceanbench evaluate --viewer-artifacts-dir <directory>` also writes the viewer data of each challenger: maps, water column, Class IV match-ups, eddies and score summaries ([viewer data documentation](https://oceanbench.edito.eu/documentation/viewer-data/)). It needs the new optional `viewer` extra (`pip install oceanbench[viewer]`, which adds `pyarrow`; the eddies also need py-eddy-tracker, installed by hand as the documentation explains); a plain install and a plain `oceanbench evaluate` are unchanged.
+- [Viewer](https://oceanbench.edito.eu/viewer.html) page on the website to explore forecast maps, water columns, Class IV match-ups and eddies, linked from the score tables.
+- The eddy census of the viewer data runs in parallel processes: `OCEANBENCH_EDDY_CENSUS_MAX_WORKERS`, by default 8 or the number of available CPUs if smaller.
+- The eddy census leaves out eddies centred less than 5 degrees from the equator, where geostrophy and the speed radius are undefined (`minimum_absolute_centre_latitude_degrees` in the census metadata).
+
+### Changed
+
+- The Lagrangian trajectory metrics load the reference surface currents once and cull their dask graph, instead of letting parcels compute one time slice at a time from the lazy remote archive. At 1/12 degree this takes about 25 s per start instead of a cost that grows with the square of the number of starts. Scores are bitwise unchanged.
+
 ## 0.7.0 - 2026-11-18
 
 **Scores:** unchanged vs 0.6.2. Incompatible change: the evaluation output changes from a report notebook to a scores file.

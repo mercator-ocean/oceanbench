@@ -6,6 +6,7 @@
 This module exposes the challenger datasets evaluated in the benchmark.
 """
 
+import numpy
 import xarray
 from datetime import datetime, timedelta
 from collections.abc import Callable
@@ -21,6 +22,8 @@ from oceanbench.core.remote_http import (
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
+from oceanbench.core.dataset_source import with_challenger_kind, with_glorys_sea_surface_height_datum
+from oceanbench.core.references import glorys as glorys_references
 
 _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
 _CLOUDFERRO_BASELINE_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/baseline-forecasts"
@@ -207,6 +210,59 @@ def hclimrep_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarr
 def _hclimrep_dataset_path(start_datetime: datetime) -> str:
     start_datetime_string = start_datetime.strftime("%Y%m%d")
     return f"{_CLOUDFERRO_ML_FORECASTS_URL}/hclimrep/{start_datetime_string}.zarr"
+
+
+# Years from helper_scripts/baseline_generation/compute_glorys_climatology.py (commit 39495ac).
+_CLIMATOLOGY_DESCRIPTION = "Daily climatology derived from GLORYS, years 1993 to 2019"
+_GLORYS_DESCRIPTION = (
+    "Reanalysis; assimilates the SLA, SST and T/S profiles scored here; values are analysis residuals, "
+    "not forecast skill; lead is nominal (valid date)."
+)
+
+
+def _as_climatology(dataset: xarray.Dataset) -> xarray.Dataset:
+    return with_glorys_sea_surface_height_datum(with_challenger_kind(dataset, "baseline", _CLIMATOLOGY_DESCRIPTION))
+
+
+def climatology(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _as_climatology(
+        _open_multizarr_forecasts_as_challenger_dataset(
+            _climatology_dataset_path, first_day_datetimes=first_day_datetimes
+        )
+    )
+
+
+def climatology_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    return _as_climatology(interpolate_1_degree(climatology(first_day_datetimes)))
+
+
+def _climatology_dataset_path(start_datetime: datetime) -> str:
+    start_datetime_string = start_datetime.strftime("%Y%m%d")
+    return f"{_CLOUDFERRO_BASELINE_FORECASTS_URL}/climatology/{start_datetime_string}.zarr"
+
+
+def _forecast_shaped_template(first_day_datetimes: list[datetime]) -> xarray.Dataset:
+    # The GLORYS reference openers take their start dates and lead day count from a challenger.
+    return xarray.Dataset(
+        coords={
+            "first_day_datetime": numpy.array(first_day_datetimes, dtype="datetime64[ns]"),
+            "lead_day_index": numpy.arange(LEAD_DAYS_COUNT),
+        }
+    )
+
+
+def _as_glorys(dataset: xarray.Dataset) -> xarray.Dataset:
+    return with_glorys_sea_surface_height_datum(with_challenger_kind(dataset, "reference", _GLORYS_DESCRIPTION))
+
+
+def glorys(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    template = _forecast_shaped_template(_resolved_first_day_datetimes(first_day_datetimes))
+    return _as_glorys(glorys_references._glorys_reanalysis_dataset_1_4(template))
+
+
+def glorys_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    template = _forecast_shaped_template(_resolved_first_day_datetimes(first_day_datetimes))
+    return _as_glorys(glorys_references._glorys_reanalysis_dataset_1_degree(template))
 
 
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:

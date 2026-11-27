@@ -1,0 +1,471 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* Part of the viewer stylesheet, loaded after shell.css and before responsive.css.
+   The data-attribute contract app.js writes is documented at the head of shell.css.
+   Every value comes from tokens.css. */
+
+/* The map fills the middle column edge to edge; the dock row closes it at the bottom
+   on the same edge as the two side panels. */
+.map-area {
+  position: relative;
+  container-type: inline-size;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas-void);
+}
+
+.map-content {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Two panels are separated by a hairline (the grid background through the gap). */
+.panel-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 0;
+  background: var(--border);
+}
+.panel-grid[data-layout="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.panel-grid[data-layout="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; column-gap: var(--hairline); }
+.panel-grid[data-display="swipe"],
+.panel-grid[data-display="diff"] { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+.panel.head-only .panel-canvas-wrap,
+.panel.head-only .panel-badge { display: none; }
+
+.display-switch { display: inline-flex; }
+.display-switch[hidden] { display: none; }
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--canvas-void);
+}
+.panel.active { outline: var(--hairline) solid var(--accent); outline-offset: calc(-1 * var(--hairline)); }
+
+/* Panel head: a flat translucent strip over the map, no gradient, no rule. */
+.panel-head {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: var(--ob-z-map-overlay);
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--s2);
+  padding: var(--s1) var(--s2);
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  border-width: 0 0 var(--hairline) var(--hairline);
+  border-radius: 0 0 0 var(--radius);
+}
+.panel-head:not(:has(.method-note-btn, .panel-badge:not(:empty))) { display: none; }
+.panel-head .panel-forecast-label,
+.panel-head .spacer { display: none; }
+.panel.head-only .panel-head {
+  position: static;
+  background: var(--surface);
+  backdrop-filter: none;
+  border-top: var(--hairline) solid var(--border);
+}
+/* The forecast name is text in the text colour; the series colour lives in a swatch,
+   so the label always clears contrast in both themes. */
+.panel-forecast-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--text-md);
+  font-weight: var(--w-strong);
+  color: var(--text);
+  white-space: nowrap;
+}
+.panel-forecast-label::before {
+  content: "";
+  width: var(--ob-viewer-swatch-size);
+  height: var(--ob-viewer-swatch-size);
+  border-radius: 50%;
+  background: var(--forecast-color, var(--muted));
+}
+.panel-head select { flex: 0 1 auto; max-width: min(var(--ob-viewer-select-max), 100%); min-width: var(--ob-viewer-select-min); }
+.panel-head .spacer { flex: 1; }
+.panel-badge { font-size: var(--text-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.panel-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  background: var(--canvas-void);
+}
+.panel-canvas-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.panel-field { cursor: var(--field-cursor) 10 10, crosshair; }
+.panel-particles, .panel-overlay { pointer-events: none; }
+.panel-canvas-wrap.trajectory-ready .panel-field { cursor: var(--field-cursor) 10 10, crosshair; }
+
+/* Floating map overlays: one chip style, no border, one subtle shadow. */
+.panel-readout,
+.layer-info,
+.class4-tooltip,
+.panel-swipe-hint {
+  padding: var(--s1) var(--s2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--ob-line-tight);
+  color: var(--text);
+  background: var(--readout-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--overlay-shadow);
+  backdrop-filter: blur(var(--ob-viewer-blur));
+  pointer-events: none;
+}
+.panel-readout {
+  position: absolute;
+  left: var(--s2);
+  bottom: var(--s2);
+  min-width: var(--ob-viewer-readout-min);
+  max-width: 90%;
+}
+.panel-readout:empty { visibility: hidden; }
+.panel-readout:empty::before { content: "\200B"; }
+
+/* Companion cursor: the same crosshair as the real cursor, at reduced opacity. */
+.panel-ghost-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--ob-viewer-cursor-box);
+  height: var(--ob-viewer-cursor-box);
+  margin: calc(-1 * var(--ob-viewer-cursor-hotspot)) 0 0 calc(-1 * var(--ob-viewer-cursor-hotspot));
+  background-image: var(--field-cursor);
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: var(--ob-z-map-overlay);
+}
+.panel-ghost-cursor[hidden] { display: none; }
+
+.panel-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  background: color-mix(in srgb, var(--canvas-void) 72%, transparent);
+  font-size: var(--text-md);
+  pointer-events: none;
+}
+.panel-loading[hidden] { display: none; }
+.panel.loading .panel-canvas-wrap { opacity: 0.78; }
+.panel-swipe-hint {
+  position: absolute;
+  top: calc(var(--control-height) + var(--s3));
+  right: var(--s2);
+  color: var(--muted);
+}
+
+.panel-swipe-handle {
+  position: absolute;
+  top: 50%;
+  width: var(--ob-viewer-swipe-handle-size);
+  height: var(--ob-viewer-swipe-handle-size);
+  margin-left: calc(var(--ob-viewer-swipe-handle-size) / -2);
+  margin-top: calc(var(--ob-viewer-swipe-handle-size) / -2);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--swipe-divider, var(--accent));
+  color: var(--ob-viewer-on-handle);
+  font-size: var(--text-md);
+  line-height: 1;
+  box-shadow: var(--overlay-shadow);
+  pointer-events: none;
+}
+.panel-swipe-handle[hidden] { display: none; }
+
+/* ---- dock: one grid row under the map ---------------------------------------
+   play and speed | lead slider and readout | colour bar | legend and status */
+.map-dock {
+  display: grid;
+  grid-template-columns: auto minmax(var(--ob-viewer-lead-track-min), auto) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s2) var(--s5);
+  padding: var(--s2) var(--pad);
+  border-top: var(--hairline) solid var(--border);
+  background: var(--surface);
+}
+.dock-playback {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+.dock-playback .playback-play {
+  width: var(--ob-viewer-play-width);
+  padding: 0;
+  text-align: center;
+}
+.playback-speed { display: flex; align-items: center; }
+.playback-speed .ghost-button { padding: 0 var(--s2); }
+.dock-lead {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+  height: var(--control-height);
+}
+.lead-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 var(--ob-viewer-lead-track-max);
+  min-width: var(--ob-viewer-lead-track-min);
+  max-width: var(--ob-viewer-lead-track-max);
+  --lead-thumb: var(--ob-viewer-thumb-size);
+}
+.dock-lead input[type="range"] {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  height: var(--s5);
+  margin: 0;
+  cursor: pointer;
+}
+.lead-ticks {
+  position: absolute;
+  left: calc(var(--lead-thumb) / 2);
+  right: calc(var(--lead-thumb) / 2);
+  top: calc(50% + var(--s2));
+  height: var(--ob-viewer-tick-height);
+  pointer-events: none;
+  background:
+    linear-gradient(var(--control-border), var(--control-border)) 100% 0 / var(--hairline) 100% no-repeat,
+    repeating-linear-gradient(
+      to right,
+      var(--control-border) 0 var(--hairline),
+      transparent var(--hairline) calc(100% / var(--lead-steps, 9))
+    );
+}
+.dock-lead input[type="range"]::-webkit-slider-runnable-track {
+  height: var(--ob-viewer-track-height);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+.dock-lead input[type="range"]::-moz-range-track {
+  height: var(--ob-viewer-track-height);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+.dock-lead input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--lead-thumb);
+  height: var(--lead-thumb);
+  margin-top: calc((var(--ob-viewer-track-height) - var(--lead-thumb)) / 2);
+  border-radius: 50%;
+  background: var(--text);
+  border: 0;
+}
+.dock-lead input[type="range"]::-moz-range-thumb {
+  width: var(--lead-thumb);
+  height: var(--lead-thumb);
+  border-radius: 50%;
+  background: var(--text);
+  border: 0;
+}
+.dock-lead input[type="range"]:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: var(--focus-width); }
+.dock-lead .lead-value {
+  white-space: nowrap;
+  min-width: var(--ob-viewer-lead-value-width);
+  font-size: var(--text-md);
+  color: var(--text);
+}
+/* The colour bar is a fixed box so the row never changes height or width with state.
+   No padding: the drawing code measures clientWidth and clientHeight. */
+.dock-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: center;
+  gap: var(--s1);
+  width: var(--ob-viewer-colorbar-width);
+}
+.colorbar {
+  width: 100%;
+  height: var(--ob-viewer-colorbar-height);
+  display: block;
+}
+#colorbar-2[hidden] { display: none; }
+
+.dock-legend {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: center;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+/* The one reading that stays on the map, in the opposite corner to the readout. */
+.layer-info {
+  position: absolute;
+  right: var(--s2);
+  bottom: calc(var(--head-strip-height, 0rem) + var(--s2));
+  z-index: var(--ob-z-map-overlay);
+  margin: 0;
+  color: var(--muted);
+}
+.layer-info:empty { display: none; }
+
+
+.class4-tooltip {
+  position: fixed;
+  z-index: var(--ob-z-popover);
+  width: max-content;
+  max-width: min(var(--ob-viewer-popover-max), calc(100vw - var(--s4)));
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Legends in the dock: plain text on the dock surface, no chip, no border. */
+.year-legend {
+  display: flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  gap: var(--s1) var(--s3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin: 0;
+}
+.year-legend .item { display: inline-flex; align-items: center; gap: var(--s1); }
+.year-legend .swatch { display: inline-block; width: var(--ob-viewer-swatch-size); height: var(--ob-viewer-swatch-size); border-radius: var(--radius); box-shadow: inset 0 0 0 var(--hairline) var(--ob-viewer-swatch-edge); }
+
+.map-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  line-height: var(--ob-line-tight);
+}
+.map-legend .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); }
+.map-legend .legend-item { display: inline-flex; align-items: center; gap: var(--s1); color: var(--text); }
+.map-legend .legend-dot { display: inline-block; width: var(--ob-viewer-swatch-size); height: var(--ob-viewer-swatch-size); border-radius: 50%; }
+.map-legend .legend-line { display: inline-block; width: var(--ob-viewer-legend-line); height: var(--ob-viewer-swatch-line); border-radius: var(--radius); }
+.map-legend .legend-seed { color: var(--muted); font-size: inherit; line-height: 1; }
+.map-legend .legend-note { color: var(--text); }
+.map-legend .legend-note.dim { color: var(--muted); }
+.map-legend .legend-help { display: inline-flex; vertical-align: middle; margin-left: var(--s1); }
+
+.status {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status:empty { display: none; }
+.status.error { color: var(--error); }
+
+/* ---- name strip: a series-coloured top edge and the dataset name, full pane width ---- */
+.panel-head { display: none !important; }
+.panel.head-only { display: none; }
+.panel-chips {
+  --strip-edge-a: var(--forecast-color, var(--muted));
+  --strip-edge-b: var(--strip-edge-a);
+  --strip-split: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--ob-z-map-overlay);
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  height: var(--ob-viewer-strip-height);
+  padding: var(--ob-viewer-strip-edge) var(--s2) 0;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  pointer-events: none;
+}
+.panel-chips::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--ob-viewer-strip-edge);
+  background: linear-gradient(to right, var(--strip-edge-a) 0 var(--strip-split), var(--strip-edge-b) var(--strip-split) 100%);
+}
+.map-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-sm);
+  line-height: var(--ob-line-tight);
+  color: var(--text);
+  white-space: nowrap;
+}
+.map-chip:empty, .map-chip[hidden] { display: none; }
+.panel-name { font-size: var(--text-sm); font-weight: var(--w-strong); text-transform: none; }
+.panel-chips .panel-badge { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.panel-chips.is-split .panel-name-b { position: absolute; left: calc(var(--strip-split) + var(--s2)); top: var(--ob-viewer-strip-edge); bottom: 0; }
+.panel-swipe-hint { display: none !important; }
+
+/* ---- on-map key, bottom-left on an opaque surface ------------------------------ */
+.map-content { position: relative; }
+.map-key {
+  position: absolute;
+  left: var(--s2);
+  bottom: var(--s2);
+  z-index: var(--ob-z-map-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  max-width: calc(100% - var(--s6) * 3);
+  padding: var(--s2);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--overlay-shadow);
+}
+.map-key .dock-scale { width: var(--ob-viewer-colorbar-width); }
+.map-key .status:empty { display: none; }
+.panel-readout { bottom: auto; top: calc(var(--s2) * 2 + var(--control-height)); }
+
+/* ---- timeline: play, speed, the lead scrubber across the width, lead readout ---- */
+.map-dock { grid-template-columns: auto minmax(0, 1fr); padding-bottom: var(--s4); }
+.dock-lead { width: 100%; }
+.lead-track { flex: 1 1 auto; max-width: none; }
+.lead-tick-label {
+  position: absolute;
+  top: calc(100% + var(--hairline));
+  transform: translateX(-50%);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}

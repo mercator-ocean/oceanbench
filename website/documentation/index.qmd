@@ -21,6 +21,7 @@ This documentation describes how to prepare and evaluate a challenger with the P
 - [Data catalog](data-catalog/index.qmd)
 - [1 degree track](one-degree-track/index.qmd)
 - [Run OceanBench offline](run-offline/index.qmd)
+- [Building the viewer data](viewer-data/index.qmd)
 
 ## API reference
 
