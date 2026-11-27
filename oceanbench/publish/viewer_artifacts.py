@@ -12,9 +12,11 @@ geography and the confidence intervals have no official counterpart and are comp
 """
 
 from dataclasses import dataclass
+import datetime
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 
@@ -835,6 +837,13 @@ def _write_json(document: dict, path: Path) -> None:
     path.write_text(json.dumps(document), encoding="utf-8")
 
 
+def _stage_marker(stage: str) -> None:
+    # A UTC timestamp to line the viewer stages up with a memory timeline, when OCEANBENCH_STAGE_MARKERS is set.
+    if not os.environ.get("OCEANBENCH_STAGE_MARKERS"):
+        return
+    print(f"[viewer stage] {datetime.datetime.now(datetime.timezone.utc):%Y-%m-%dT%H:%M:%SZ} {stage}", file=sys.stderr, flush=True)
+
+
 def write_viewer_artifacts(
     directory: Path,
     dataset_slug: str,
@@ -851,6 +860,7 @@ def write_viewer_artifacts(
     written under ``insights/<slug>/<region>/``; the year files need a super-observation grid, so
     they are written for the official regions only.
     """
+    _stage_marker(f"viewer artifacts {region.id} start")
     insights_directory = directory / "insights" / dataset_slug / region.id
     insights_directory.mkdir(parents=True, exist_ok=True)
     insights: dict[str, str | None] = {
@@ -883,10 +893,13 @@ def write_viewer_artifacts(
             insights["year_error_geography"] = YEAR_ERROR_GEOGRAPHY_FILENAME
             insights["year_rmsd_by_start"] = YEAR_RMSD_BY_START_FILENAME
 
+    _stage_marker(f"eddy census {region.id} start")
     insights["eddies"] = write_region_eddy_census(insights_directory, dataset_slug, challenger_dataset, region)
+    _stage_marker(f"eddy census {region.id} end")
 
     has_maps = region.id == GLOBAL_REGION_NAME
     if has_maps:
+        _stage_marker("viewer maps start")
         year = pandas.Timestamp(challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values[0]).year
         build_column_store(
             challenger_dataset,
@@ -905,6 +918,7 @@ def write_viewer_artifacts(
             kind=get_challenger_kind(challenger_dataset),
             description=get_challenger_description(challenger_dataset),
         )
+        _stage_marker("viewer maps end")
     return ViewerArtifacts(
         insights={
             key: None if file_name is None else f"./data/insights/{dataset_slug}/{region.id}/{file_name}"
