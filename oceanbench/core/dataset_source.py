@@ -73,6 +73,25 @@ def get_challenger_description(dataset: xarray.Dataset) -> str | None:
     return dataset.attrs.get(CHALLENGER_DESCRIPTION_ATTRIBUTE)
 
 
+# A reference challenger scored against itself: the scores against this reference are zero by construction.
+CHALLENGER_OWN_REFERENCE_ATTRIBUTE = "oceanbench_challenger_own_reference"
+CHALLENGER_OWN_REFERENCES = ("glorys_reanalysis", "glo12_analysis")
+
+
+def with_challenger_own_reference(dataset: xarray.Dataset, reference: str) -> xarray.Dataset:
+    """Name the benchmark reference (``glorys_reanalysis`` or ``glo12_analysis``) a reference challenger is."""
+    if reference not in CHALLENGER_OWN_REFERENCES:
+        raise ValueError(f"Unknown reference {reference!r}, expected one of {CHALLENGER_OWN_REFERENCES}")
+    return dataset.assign_attrs({CHALLENGER_OWN_REFERENCE_ATTRIBUTE: reference})
+
+
+def get_challenger_own_reference(dataset: xarray.Dataset) -> str | None:
+    """The benchmark reference a reference challenger is; GLORYS for a reference that does not say."""
+    if get_challenger_kind(dataset) != "reference":
+        return None
+    return dataset.attrs.get(CHALLENGER_OWN_REFERENCE_ATTRIBUTE, "glorys_reanalysis")
+
+
 # Challengers built on GLORYS fields carry this datum marker so Class IV SLA uses the GLORYS shift.
 SEA_SURFACE_HEIGHT_DATUM_ATTRIBUTE = "oceanbench_sea_surface_height_datum"
 GLORYS_SEA_SURFACE_HEIGHT_DATUM = "glorys"

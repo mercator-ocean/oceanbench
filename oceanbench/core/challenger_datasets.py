@@ -8,6 +8,8 @@ This module exposes the challenger datasets evaluated in the benchmark.
 
 import numpy
 import xarray
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from collections.abc import Callable
 
@@ -22,8 +24,28 @@ from oceanbench.core.remote_http import (
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 from oceanbench.core.weekly_stage import maybe_stage_weekly_dataset
 from oceanbench.core.interpolate import interpolate_1_degree
-from oceanbench.core.dataset_source import with_challenger_kind, with_glorys_sea_surface_height_datum
+from oceanbench.core.dataset_source import (
+    with_challenger_kind,
+    with_challenger_own_reference,
+    with_glorys_sea_surface_height_datum,
+)
+from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.references import glo12 as glo12_references
 from oceanbench.core.references import glorys as glorys_references
+
+# Chunks of the multizarr challenger opens. Unset, they open as before; the viewer maps set FIELD_CHUNKS.
+_multizarr_open_chunks: ContextVar[dict | None] = ContextVar("multizarr_open_chunks", default=None)
+
+
+@contextmanager
+def field_chunked_challenger_open():
+    """Open the multizarr challengers one horizontal field per chunk, for building the viewer maps only."""
+    token = _multizarr_open_chunks.set(FIELD_CHUNKS)
+    try:
+        yield
+    finally:
+        _multizarr_open_chunks.reset(token)
+
 
 _CLOUDFERRO_ML_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/ml-forecast-outputs"
 _CLOUDFERRO_BASELINE_FORECASTS_URL = "https://s3.waw3-1.cloudferro.com/oceanbench-bucket/public/baseline-forecasts"
@@ -218,6 +240,10 @@ _GLORYS_DESCRIPTION = (
     "Reanalysis; assimilates the SLA, SST and T/S profiles scored here; values are analysis residuals, "
     "not forecast skill; lead is nominal (valid date)."
 )
+_GLO12_ANALYSIS_DESCRIPTION = (
+    "Analysis of the GLO12 system; assimilates SLA, SST and T/S profiles like the ones scored here; values are "
+    "analysis residuals, not forecast skill; lead is nominal (valid date)."
+)
 
 
 def _as_climatology(dataset: xarray.Dataset) -> xarray.Dataset:
@@ -252,7 +278,11 @@ def _forecast_shaped_template(first_day_datetimes: list[datetime]) -> xarray.Dat
 
 
 def _as_glorys(dataset: xarray.Dataset) -> xarray.Dataset:
-    return with_glorys_sea_surface_height_datum(with_challenger_kind(dataset, "reference", _GLORYS_DESCRIPTION))
+    return with_glorys_sea_surface_height_datum(
+        with_challenger_own_reference(
+            with_challenger_kind(dataset, "reference", _GLORYS_DESCRIPTION), "glorys_reanalysis"
+        )
+    )
 
 
 def glorys(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
@@ -263,6 +293,27 @@ def glorys(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
 def glorys_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
     template = _forecast_shaped_template(_resolved_first_day_datetimes(first_day_datetimes))
     return _as_glorys(glorys_references._glorys_reanalysis_dataset_1_degree(template))
+
+
+def _twelfth_degree_template(first_day_datetimes: list[datetime]) -> xarray.Dataset:
+    # The twelfth-degree reference openers also take their depths from a challenger: the GLO12 forecast ones.
+    depths = _open_glo12_forecast_week(first_day_datetimes[0])[Dimension.DEPTH.key()].values
+    return _forecast_shaped_template(first_day_datetimes).assign_coords({Dimension.DEPTH.key(): depths})
+
+
+def glorys_twelfth_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    template = _twelfth_degree_template(_resolved_first_day_datetimes(first_day_datetimes))
+    return _as_glorys(glorys_references._glorys_reanalysis_dataset_1_12(template))
+
+
+def glo12_analysis(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    template = _twelfth_degree_template(_resolved_first_day_datetimes(first_day_datetimes))
+    return with_challenger_own_reference(
+        with_challenger_kind(
+            glo12_references._glo12_analysis_dataset_1_12(template), "reference", _GLO12_ANALYSIS_DESCRIPTION
+        ),
+        "glo12_analysis",
+    )
 
 
 def _challenger_dataset_name(forecast_zarr_path_from_start_datetime: Callable[[datetime], str]) -> str:
@@ -290,7 +341,7 @@ def _opened_challenger_week_dataset(
 ) -> xarray.Dataset:
     return open_remote_zarr(
         forecast_zarr_path_from_start_datetime(first_day_datetime),
-        chunks="auto",
+        chunks=_multizarr_open_chunks.get() or "auto",
     )
 
 
@@ -308,6 +359,7 @@ def _remote_multizarr_forecasts_as_challenger_dataset(
         combine="nested",
         concat_dim="first_day_datetime",
         parallel=False,
+        **({"chunks": chunks} if (chunks := _multizarr_open_chunks.get()) else {}),
     ).assign({"first_day_datetime": first_day_datetimes})
     return challenger_dataset
 

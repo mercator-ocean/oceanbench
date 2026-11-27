@@ -91,6 +91,18 @@ _GLORYS = {
     "resolution": "1/4°",
 }
 
+_GLO12_ANALYSIS = {
+    "label": "GLO12 analysis",
+    "url": "https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024",
+    "organisation": "Mercator Ocean",
+    "organisation_url": "https://mercator-ocean.eu",
+    "note": "An analysis that assimilates observations, shown as a reference, not a forecast.",
+    "method": "Reference",
+    "forecast_type": "Analysis",
+    "initial_conditions": "Not applicable",
+    "resolution": "1/12°",
+}
+
 _HCLIMREP = {
     "label": "HClimRep",
     "url": "https://arxiv.org/abs/2609.28601",
@@ -123,6 +135,8 @@ CHALLENGERS = {
     "climatology_1_degree": {**_CLIMATOLOGY, "resolution": "1°"},
     "glorys": _GLORYS,
     "glorys_1_degree": {**_GLORYS, "resolution": "1°"},
+    "glorys_twelfth_degree": {**_GLORYS, "resolution": "1/12°"},
+    "glo12_analysis": _GLO12_ANALYSIS,
 }
 
 

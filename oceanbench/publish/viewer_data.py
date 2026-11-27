@@ -26,7 +26,7 @@ import xarray
 
 from oceanbench import metrics
 from oceanbench.core.classIV_matchups import Class4Matchups, class4_matchups
-from oceanbench.core.dataset_source import DEFAULT_CHALLENGER_KIND, get_challenger_kind
+from oceanbench.core.dataset_source import DEFAULT_CHALLENGER_KIND, get_challenger_kind, get_challenger_own_reference
 from oceanbench.core.dataset_utils import Dimension
 from oceanbench.core.regions import RegionSpec, region_to_dict
 from oceanbench.core.scores import CLASS4_METRIC_FUNCTION_NAME, GRIDDED_METRIC_FUNCTION_NAMES, score_rows
@@ -132,7 +132,7 @@ def scores_by_start_document(
     gridded_by_start: dict[tuple, numpy.ndarray] | None,
     class4_by_start: dict[tuple, tuple[numpy.ndarray, numpy.ndarray]] | None,
     class4_bias: dict[tuple, numpy.ndarray] | None,
-    drop_glorys_reference: bool = False,
+    dropped_reference: str | None = None,
     gridded_unavailable_reason: str | None = None,
 ) -> dict:
     """
@@ -172,7 +172,7 @@ def scores_by_start_document(
             if reference == "observations":
                 continue
             reference_label = _SUMMARY_REFERENCES[reference]
-            if drop_glorys_reference and reference_label == "glorys":
+            if reference_label == dropped_reference:
                 continue
             grouped.setdefault((metric, reference_label, variable, depth), {})[lead_day] = values
         for (metric, reference, variable, depth), by_lead in sorted(grouped.items(), key=lambda item: str(item[0])):
@@ -393,6 +393,7 @@ def build_viewer_data(
     matchups: pandas.DataFrame | Class4Matchups | None,
     document_rows: list[dict],
     start_tables: dict[str, list[pandas.DataFrame]] | None = None,
+    map_dataset: xarray.Dataset | None = None,
 ) -> None:
     """
     Write the viewer data of one evaluated challenger and region into ``directory``.
@@ -407,7 +408,7 @@ def build_viewer_data(
     has_matchups = matchups is not None and len(matchups) > 0
     rows_by_start = class4_rmsd_rows_by_start(matchups) if has_matchups else None
     artifacts = write_viewer_artifacts(
-        output_directory, challenger_name, challenger_dataset, region, matchups, rows_by_start
+        output_directory, challenger_name, challenger_dataset, region, matchups, rows_by_start, map_dataset
     )
     start_dates = [
         pandas.Timestamp(start_date) for start_date in challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
@@ -421,7 +422,7 @@ def build_viewer_data(
     summary_rows = scores_summary_rows(
         challenger_name, region, document_rows, start_dates, gridded_by_start, class4_by_start
     )
-    is_reference = get_challenger_kind(challenger_dataset) == "reference"
+    own_reference = get_challenger_own_reference(challenger_dataset)
     artifacts.insights["scores_by_start"] = write_scores_by_start(
         output_directory,
         scores_by_start_document(
@@ -431,12 +432,12 @@ def build_viewer_data(
             gridded_by_start,
             class4_by_start if has_matchups else None,
             class4_bias_arrays(class4_bias_by_start(matchups), start_dates) if has_matchups else None,
-            drop_glorys_reference=is_reference,
+            dropped_reference=None if own_reference is None else _SUMMARY_REFERENCES[own_reference],
         ),
     )
-    if is_reference:
-        # The GLORYS reference scored against its own gridded reanalysis is zero by construction.
-        summary_rows = [row for row in summary_rows if row["reference"] != _SUMMARY_REFERENCES["glorys_reanalysis"]]
+    if own_reference is not None:
+        # A reference (GLORYS, GLO12 analysis) scored against its own gridded fields is zero by construction.
+        summary_rows = [row for row in summary_rows if row["reference"] != _SUMMARY_REFERENCES[own_reference]]
     update_viewer_indexes(
         output_directory, challenger_name, region, artifacts, summary_rows, get_challenger_kind(challenger_dataset)
     )

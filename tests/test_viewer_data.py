@@ -523,6 +523,37 @@ def test_the_scores_of_a_bucket_are_read_with_only_the_boto3_endpoint(monkeypatc
     assert clients == ["https://s3.example.org"]
 
 
+@pytest.mark.parametrize(
+    ("own_reference", "dropped", "kept"),
+    [("glorys_reanalysis", "glorys", "glo12"), ("glo12_analysis", "glo12", "glorys")],
+)
+def test_a_reference_challenger_has_no_summary_rows_against_itself(
+    tmp_path, monkeypatch, own_reference, dropped, kept
+) -> None:
+    from oceanbench.core.dataset_source import with_challenger_kind, with_challenger_own_reference
+
+    for metric_function_name in viewer_data.GRIDDED_METRIC_FUNCTION_NAMES:
+        monkeypatch.setattr(oceanbench.metrics, metric_function_name, _gridded_metric)
+    dataset = _sea_surface_height_dataset(("2024-01-03",))
+    profile = xarray.DataArray([1.0, 0.9, 0.5], coords={"depth": [0.5, 10.0, 50.0]})
+    surface = xarray.ones_like(dataset["sea_surface_height_above_geoid"])
+    dataset["sea_water_potential_temperature"] = 15.0 * surface * profile
+    dataset["sea_water_salinity"] = 35.0 * surface * profile
+    dataset = with_challenger_own_reference(with_challenger_kind(dataset, "reference", "a reference"), own_reference)
+    document_rows = score_rows(
+        "rmsd_of_variables_compared_to_glorys_reanalysis", _gridded_metric(dataset, GLOBAL)
+    ) + score_rows("rmsd_of_variables_compared_to_glo12_analysis", _gridded_metric(dataset, GLOBAL))
+
+    viewer_data.build_viewer_data(str(tmp_path), "a_reference", dataset, GLOBAL, None, document_rows)
+
+    summary = json.loads((tmp_path / "scores-summary.json").read_text())
+    assert {row["reference"] for row in summary} == {kept}
+    assert dropped not in {row["reference"] for row in summary}
+    by_start = json.loads((tmp_path / "insights" / "a_reference" / "global" / "scores-by-start.json").read_text())
+    assert {series["reference"] for series in by_start["gridded"]["series"]} == {kept}
+    assert by_start["class4"]["available"] is False
+
+
 def test_scores_by_start_recombine_to_the_year_class4_scores_and_bias() -> None:
     matchups = _matchups()
     class4_by_start = viewer_data.class4_scores_by_start(class4_rmsd_rows_by_start(matchups), _START_DATES)

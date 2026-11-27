@@ -762,3 +762,56 @@ def glorys_1_degree(first_day_datetimes: list[datetime] | None = None) -> xarray
     """
 
     return challenger_datasets.glorys_1_degree(first_day_datetimes)
+
+
+def glorys_twelfth_degree(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    """
+    Open the GLORYS 1/12 degree reanalysis as a reference challenger dataset.
+
+    A reference, not a forecast: the GLORYS reanalysis at its native resolution, from Copernicus
+    Marine (``cmems_mod_glo_phy_my_0.083deg_P1D-m``), on the valid date of each lead day and on the
+    depths of the GLO12 forecasts. It assimilates observations, so its Class IV scores bound what a
+    forecast can reach. Needs Copernicus Marine credentials.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+
+    Returns
+    -------
+    Dataset
+        The Dataset, shaped like a challenger (``first_day_datetime``, ``lead_day_index``).
+
+    Examples
+    --------
+    >>> glorys_twelfth_degree() # doctest: +SKIP
+    """
+
+    return challenger_datasets.glorys_twelfth_degree(first_day_datetimes)
+
+
+def glo12_analysis(first_day_datetimes: list[datetime] | None = None) -> xarray.Dataset:
+    """
+    Open the GLO12 1/12 degree analysis as a reference challenger dataset.
+
+    A reference, not a forecast: the GLO12 analysis, from Copernicus Marine, on the valid date of each
+    lead day and on the depths of the GLO12 forecasts. It assimilates observations, so its Class IV
+    scores bound what a forecast can reach. Needs Copernicus Marine credentials.
+
+    Parameters
+    ----------
+    first_day_datetimes : list[datetime], optional
+        Forecast start dates to open, all benchmark start dates by default.
+
+    Returns
+    -------
+    Dataset
+        The Dataset, shaped like a challenger (``first_day_datetime``, ``lead_day_index``).
+
+    Examples
+    --------
+    >>> glo12_analysis() # doctest: +SKIP
+    """
+
+    return challenger_datasets.glo12_analysis(first_day_datetimes)

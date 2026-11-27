@@ -143,6 +143,32 @@ CATALOG_ENTRIES = (
         OneDegreeVariant.UNAVAILABLE,
     ),
     CatalogEntry(
+        identifier="challenger-glorys-twelfth-degree",
+        collection=Collection.CHALLENGERS,
+        title="GLORYS reanalysis at 1/12° as a challenger",
+        description="GLORYS 1/12° reanalysis from Copernicus Marine scored as a challenger, its lead days the valid dates.",
+        library_functions=("oceanbench.datasets.challenger.glorys_twelfth_degree",),
+        source=CopernicusMarineDatasets("GLOBAL_MULTIYEAR_PHY_001_030", (GLORYS_REANALYSIS_DATASET_IDENTIFIER,)),
+        temporal_extent=TemporalExtent(BENCHMARK_FIRST_DAY, REFERENCE_LAST_DAY),
+    ),
+    CatalogEntry(
+        identifier="challenger-glo12-analysis",
+        collection=Collection.CHALLENGERS,
+        title="GLO12 analysis as a challenger",
+        description="GLO12 1/12° analysis from Copernicus Marine scored as a challenger, its lead days the valid dates.",
+        library_functions=("oceanbench.datasets.challenger.glo12_analysis",),
+        source=CopernicusMarineDatasets(
+            "GLOBAL_ANALYSISFORECAST_PHY_001_024",
+            (
+                "cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m",
+                "cmems_mod_glo_phy-so_anfc_0.083deg_P1D-m",
+                "cmems_mod_glo_phy-cur_anfc_0.083deg_P1D-m",
+                "cmems_mod_glo_phy_anfc_0.083deg_P1D-m",
+            ),
+        ),
+        temporal_extent=TemporalExtent(BENCHMARK_FIRST_DAY, REFERENCE_LAST_DAY),
+    ),
+    CatalogEntry(
         identifier="reference-glorys-reanalysis",
         collection=Collection.REFERENCES,
         title="GLORYS reanalysis",

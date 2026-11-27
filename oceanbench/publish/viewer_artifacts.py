@@ -851,6 +851,7 @@ def write_viewer_artifacts(
     region: RegionSpec,
     matchups: pandas.DataFrame | Class4Matchups | None,
     rows_by_start: pandas.DataFrame | None,
+    map_dataset: xarray.Dataset | None = None,
 ) -> ViewerArtifacts:
     """
     Write the viewer files of one challenger and region under ``directory``.
@@ -901,13 +902,15 @@ def write_viewer_artifacts(
     if has_maps:
         _stage_marker("viewer maps start")
         year = pandas.Timestamp(challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values[0]).year
+        # ``map_dataset`` is the same challenger opened in larger chunks, which keeps the map graphs small.
+        map_dataset = challenger_dataset if map_dataset is None else map_dataset
         build_column_store(
-            challenger_dataset,
+            map_dataset,
             output_path=str(directory / f"{dataset_slug}{COLUMN_STORE_SUFFIX}"),
             dataset_slug=dataset_slug,
             year=year,
         )
-        layers, specs = viewer_layers(challenger_dataset)
+        layers, specs = viewer_layers(map_dataset)
         build_pyramid(
             layers,
             specs,

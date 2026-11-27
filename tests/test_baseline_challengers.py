@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""The climatology baseline and the GLORYS reference challengers: their kind, shift and GLORYS self-comparison."""
+"""The climatology baseline and the reference challengers: their kind, shift and self-comparison."""
 
 from datetime import datetime
 
@@ -12,7 +12,13 @@ import xarray
 
 from oceanbench.core import challenger_datasets
 from oceanbench.core.references import glorys as glorys_references
-from oceanbench.core.dataset_source import get_challenger_description, get_challenger_kind, with_challenger_kind
+from oceanbench.core.dataset_source import (
+    get_challenger_description,
+    get_challenger_kind,
+    get_challenger_own_reference,
+    with_challenger_kind,
+)
+from oceanbench.core.references import glo12 as glo12_references
 from oceanbench.core.dataset_utils import Dimension, Variable
 
 _START = datetime(2024, 1, 3)
@@ -69,6 +75,66 @@ def test_the_glorys_challengers_wrap_the_reference_openers_as_references(monkeyp
         assert get_challenger_description(dataset).startswith("Reanalysis; assimilates")
     for template in templates:
         assert template.sizes == {Dimension.FIRST_DAY_DATETIME.key(): 1, Dimension.LEAD_DAY_INDEX.key(): 10}
+
+
+_FORECAST_DEPTHS = numpy.array([0.494025, 1.541375, 5727.917], dtype="float32")
+
+
+@pytest.fixture
+def twelfth_degree_templates(monkeypatch) -> list[xarray.Dataset]:
+    templates: list[xarray.Dataset] = []
+
+    def reference_opener(template: xarray.Dataset) -> xarray.Dataset:
+        templates.append(template)
+        return _sea_surface_height().to_dataset()
+
+    forecast_week = xarray.Dataset(coords={Dimension.DEPTH.key(): _FORECAST_DEPTHS})
+    monkeypatch.setattr(challenger_datasets, "_open_glo12_forecast_week", lambda _first_day: forecast_week)
+    monkeypatch.setattr(glorys_references, "_glorys_reanalysis_dataset_1_12", reference_opener)
+    monkeypatch.setattr(glo12_references, "_glo12_analysis_dataset_1_12", reference_opener)
+    return templates
+
+
+def test_the_twelfth_degree_references_open_with_the_reference_openers_on_the_glo12_forecast_depths(
+    twelfth_degree_templates,
+) -> None:
+    glorys = challenger_datasets.glorys_twelfth_degree([_START])
+    analysis = challenger_datasets.glo12_analysis([_START])
+
+    assert get_challenger_kind(glorys) == get_challenger_kind(analysis) == "reference"
+    assert get_challenger_description(glorys).startswith("Reanalysis; assimilates")
+    assert get_challenger_description(analysis).startswith("Analysis of the GLO12 system; assimilates")
+    assert get_challenger_own_reference(glorys) == "glorys_reanalysis"
+    assert get_challenger_own_reference(analysis) == "glo12_analysis"
+    for template in twelfth_degree_templates:
+        assert template.sizes == {
+            Dimension.FIRST_DAY_DATETIME.key(): 1,
+            Dimension.LEAD_DAY_INDEX.key(): 10,
+            Dimension.DEPTH.key(): 3,
+        }
+        numpy.testing.assert_array_equal(template[Dimension.DEPTH.key()].values, _FORECAST_DEPTHS)
+
+
+def test_only_the_glorys_twelfth_degree_reference_uses_the_glorys_shift(twelfth_degree_templates) -> None:
+    from oceanbench.core.classIV_support import (
+        GLORYS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
+        REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
+        sea_surface_height_shift,
+    )
+
+    assert sea_surface_height_shift(challenger_datasets.glorys_twelfth_degree([_START])) == (
+        GLORYS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    )
+    assert sea_surface_height_shift(challenger_datasets.glo12_analysis([_START])) == (
+        REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    )
+
+
+def test_a_reference_without_its_own_reference_is_glorys_and_other_kinds_have_none() -> None:
+    dataset = _sea_surface_height().to_dataset()
+    assert get_challenger_own_reference(with_challenger_kind(dataset, "reference", "")) == "glorys_reanalysis"
+    assert get_challenger_own_reference(with_challenger_kind(dataset, "baseline", "")) is None
+    assert get_challenger_own_reference(dataset) is None
 
 
 def test_a_challenger_without_a_kind_is_a_model_and_unknown_kinds_are_rejected() -> None:

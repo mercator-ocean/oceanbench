@@ -50,8 +50,8 @@ Only `CHALLENGER` is required; leave the others out to use their default.
 | `SCORES_FILE` | `s3://oceanbench-bucket/dev/benchmark/glonet-2024/glonet.global.scores.json` | With `VIEWER_ONLY=true`: the scores file to read (`s3://`, `https://` or a path). By default the scores file under `OUTPUT_PREFIX` |
 | `DASK_NUM_WORKERS` | `16` | Dask threads. By default twice the CPU limit, at most 32 (the threads mostly wait on remote reads) |
 | `MEMORY_ALERT_GB` | `20` | Every 5 s memory sample whose anonymous memory is above this is logged as a `[memory high]` line (the minute `[memory]` line also gives the maximum of the 5 s samples since the previous line) |
-| `MODE` | `shard` | `evaluate` (default), `shard` or `merge`, see "Year in several jobs" |
-| `SHARD_PREFIXES` | `dev/x/glonet/shard-1,dev/x/glonet/shard-2` | With `MODE=merge`: the `OUTPUT_PREFIX` of each shard job in `OUTPUT_BUCKET`, in start date order |
+| `MODE` | `shard` | `evaluate` (default), `shard`, `merge`, `eddy` or `eddy-merge`, see "Year in several jobs" |
+| `SHARD_PREFIXES` | `dev/x/glonet/shard-1,dev/x/glonet/shard-2` | With `MODE=merge` or `MODE=eddy-merge`: the `OUTPUT_PREFIX` of each shard job in `OUTPUT_BUCKET`, in start date order |
 | `OCEANBENCH_PY_EDDY_TRACKER_SPEC` | `git+https://github.com/Murkyy/py-eddy-tracker@3753962e9553f0fb0fd47219afadd1a019bff30a` | A pip installable py-eddy-tracker, for the eddy census of grids finer than 0.3 degree. The example is a fork of the upstream master for numpy 2 and matplotlib 3.10 (Polygon3 builds from source with the gcc of the environment). The job fails if it does not import; without it the eddy census is skipped, with a log line saying so |
 
 The other `OCEANBENCH_*` variables of OceanBench (for example `OCEANBENCH_EDDY_CENSUS_MAX_WORKERS`, `OCEANBENCH_STAGE_MAX_WORKERS`, `OCEANBENCH_REMOTE_RETRIES`) can be given as inputs too.
@@ -71,6 +71,8 @@ The S3 variables EDITO injects are those of your EDITO storage: to write into an
 A year does not fit in one job's memory and time for most models, so it can be split by start dates.
 Each `MODE=shard` job evaluates the `START_DATES` it is given, with the viewer data but without the maps, and also uploads `merge-inputs/` (the gridded scores and Lagrangian deviations of each start date and the Class IV match-ups).
 Then one `MODE=merge` job, with the same `CHALLENGER` and no `START_DATES` (or all the start dates of the shards), reads the shards listed in `SHARD_PREFIXES`, writes the scores file of the year and builds the viewer data of the year, maps included, as one evaluation of all the start dates would (see `shards.py`).
+
+To add the eddy census alone to viewer data built without it, the `MODE=eddy` jobs detect the eddies of their `START_DATES` (only the sea surface height is read, no scores), then one `MODE=eddy-merge` job with `SHARD_PREFIXES` writes the eddy files of the year with their start index under `viewer/insights/<challenger>/<region>/`. Nothing else of the viewer data is written: `insights.json` is not, its `eddies` entry is set when the files are added to the published viewer data. Both modes need `VIEWER=true` and py-eddy-tracker (`OCEANBENCH_PY_EDDY_TRACKER_SPEC`).
 The shards must hold every start date of the challenger once, in order.
 
 ## Logs

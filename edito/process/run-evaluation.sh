@@ -241,7 +241,17 @@ check_inputs() {
         mld-store) [ -n "${OCEANBENCH_MLD_STORE:-}" ] || fail "MODE=mld-store needs OCEANBENCH_MLD_STORE" ;;
         mld-ab) ;;
         code-ab) [ -n "${CODE_AB_BASE:-}" ] || fail "MODE=code-ab needs CODE_AB_BASE" ;;
-        *) fail "MODE is evaluate, shard, merge, mld-store, mld-ab or code-ab, not $MODE" ;;
+        eddy)
+            is_true "$VIEWER" || fail "MODE=eddy needs VIEWER=true"
+            ! is_true "$VIEWER_ONLY" || fail "MODE=eddy does not take VIEWER_ONLY"
+            ;;
+        eddy-merge)
+            is_true "$VIEWER" || fail "MODE=eddy-merge needs VIEWER=true"
+            [ -n "$SHARD_PREFIXES" ] || fail "MODE=eddy-merge needs SHARD_PREFIXES"
+            [ -n "$OUTPUT_BUCKET" ] || fail "MODE=eddy-merge reads the shards from OUTPUT_BUCKET: it needs the upload"
+            ! is_true "$VIEWER_ONLY" || fail "MODE=eddy-merge does not take VIEWER_ONLY"
+            ;;
+        *) fail "MODE is evaluate, shard, merge, eddy, eddy-merge, mld-store, mld-ab or code-ab, not $MODE" ;;
     esac
     if is_true "$VIEWER_ONLY" && ! is_true "$VIEWER"; then
         fail "VIEWER_ONLY=true needs VIEWER=true"
@@ -395,9 +405,20 @@ run_shard() {
     end_stage
 }
 
-run_merge() {
+run_eddy() {
+    local arguments=("$CHALLENGER_FILE" --viewer-artifacts-dir "$VIEWER_DIRECTORY")
+    if [ -n "$REGION" ]; then
+        arguments+=(--region "$REGION")
+    fi
+    begin_stage "eddy census"
+    log "shards.py eddy-census ${arguments[*]}"
+    (cd "$RUN_DIRECTORY" && with_timestamps env PYTHONUNBUFFERED=1 python3 "$SHARDS_HELPER" eddy-census "${arguments[@]}")
+    end_stage
+}
+
+fetch_shards() {
     begin_stage "fetch shards"
-    local shard_directories=() prefix index=0
+    local prefix index=0
     IFS=, read -r -a prefixes <<<"$SHARD_PREFIXES"
     for prefix in "${prefixes[@]}"; do
         prefix="${prefix#"${prefix%%[![:space:]]*}"}"
@@ -408,6 +429,24 @@ run_merge() {
         shard_directories+=("$SHARDS_DIRECTORY/$index")
     done
     end_stage
+}
+
+run_eddy_merge() {
+    shard_directories=()
+    fetch_shards
+    local arguments=("$CHALLENGER_FILE" "${shard_directories[@]}" --viewer-artifacts-dir "$VIEWER_DIRECTORY")
+    if [ -n "$REGION" ]; then
+        arguments+=(--region "$REGION")
+    fi
+    begin_stage "merge eddy census"
+    log "shards.py eddy-merge ${arguments[*]}"
+    (cd "$RUN_DIRECTORY" && with_timestamps env PYTHONUNBUFFERED=1 python3 "$SHARDS_HELPER" eddy-merge "${arguments[@]}")
+    end_stage
+}
+
+run_merge() {
+    shard_directories=()
+    fetch_shards
     local arguments=("$CHALLENGER_FILE" "${shard_directories[@]}" --output-dir "$RUN_DIRECTORY")
     if is_true "$VIEWER"; then
         arguments+=(--viewer-artifacts-dir "$VIEWER_DIRECTORY")
@@ -445,7 +484,7 @@ upload_results() {
     [ -n "$OUTPUT_BUCKET" ] || return 0
     begin_stage "upload results"
     local sources=()
-    if ! is_true "$VIEWER_ONLY"; then
+    if ! is_true "$VIEWER_ONLY" && [ "${MODE#eddy}" = "$MODE" ]; then
         sources+=("$RUN_DIRECTORY/$(scores_file_name)")
     fi
     if [ "$MODE" = "shard" ]; then
@@ -519,6 +558,8 @@ main() {
         mld-store) run_mld_store ;;
         mld-ab) run_mld_ab ;;
         code-ab) run_code_ab ;;
+        eddy) run_eddy ;;
+        eddy-merge) run_eddy_merge ;;
         *) run_evaluation ;;
     esac
     upload_results
