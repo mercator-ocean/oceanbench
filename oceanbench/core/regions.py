@@ -168,6 +168,24 @@ def custom_region(
     )
 
 
+def padded_region(region: RegionLike, margin_degrees: float) -> RegionSpec:
+    """The region widened by ``margin_degrees`` on every side, for filters that need context past its edge."""
+    resolved_region = resolve_region(region)
+    if resolved_region.bounds is None:
+        return resolved_region
+    bounds = resolved_region.bounds
+    return RegionSpec(
+        id=f"{resolved_region.id}-padded",
+        display_name=f"{resolved_region.display_name} padded",
+        bounds=BoundingBox(
+            minimum_latitude=max(bounds.minimum_latitude - margin_degrees, -90.0),
+            maximum_latitude=min(bounds.maximum_latitude + margin_degrees, 90.0),
+            minimum_longitude=bounds.minimum_longitude - margin_degrees,
+            maximum_longitude=bounds.maximum_longitude + margin_degrees,
+        ),
+    )
+
+
 def _bounds_to_dict(bounds: BoundingBox | None) -> dict[str, float] | None:
     if bounds is None:
         return None
@@ -253,6 +271,10 @@ def load_region_file(path: str | Path) -> RegionSpec:
     except OSError as error:
         raise ValueError(f"Unable to read region file {region_path}: {error.strerror or error}") from error
     return region_from_dict(region_data)
+
+
+class RegionDoesNotOverlapError(ValueError):
+    pass
 
 
 def subset_dataset_to_region(
@@ -356,4 +378,6 @@ def _validated_mask(
     computed_mask = mask.compute()
     if bool(computed_mask.any().item()):
         return computed_mask
-    raise ValueError(f"Region {region.display_name} does not overlap dataset {dimension_name} coordinates.")
+    raise RegionDoesNotOverlapError(
+        f"Region {region.display_name} does not overlap dataset {dimension_name} coordinates."
+    )

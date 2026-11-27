@@ -9,6 +9,7 @@ import pandas
 import xarray
 
 from oceanbench.core.climate_forecast_standard_names import rename_dataset_with_standard_names
+from oceanbench.core.dataset_source import GLORYS_SEA_SURFACE_HEIGHT_DATUM, SEA_SURFACE_HEIGHT_DATUM_ATTRIBUTE
 from oceanbench.core.dataset_utils import (
     DEPTH_BINS_DEFAULT,
     DEPTH_BIN_DISPLAY_ORDER,
@@ -28,7 +29,14 @@ from oceanbench.core.resolution import (
 )
 from oceanbench.core.runtime_configuration import current_runtime_configuration
 
+# SSH-to-SLA datum shift tuned on GLO12, paired with the GLO12 MDT; used by every challenger.
 REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.1148
+# Shift for the GLORYS-based rows (GLORYS reference and GLORYS climatology). GLORYS global-mean SSH sits
+# 0.0502 m above GLO12: 2024 mean of the area-weighted global-mean zos, GLORYS 1/4 minus the GLO12 analysis
+# 1/4 gridded reference, 52 weekly starts at lead_day_index 0, common ocean mask with |lat| < 66 degrees
+# (std 0.0042 m, range 0.043 to 0.058 m, seasonal). Script: viewer_verification_2026-11-19/baselines_1start/
+# diag/glorys_glo12_offset.py. Shift = -0.1148 + 0.0502.
+GLORYS_MEAN_SEA_SURFACE_HEIGHT_SHIFT = -0.0646
 VELOCITY_TARGET_DEPTH_METERS = 15.0
 OBSERVATION_COUNT_COLUMN = "Observations"
 MISSING_COUNT_COLUMN = "Missing"
@@ -127,6 +135,11 @@ def _interpolate_observations_to_target_depth(
         return pandas.DataFrame(columns=target_columns)
     result = pandas.DataFrame.from_records(records)
     return result[target_columns]
+
+
+def reset_class4_observations_cache() -> None:
+    # The cache is keyed on the id of the observation dataset, which Python reuses once a dataset is freed.
+    _CLASS4_OBSERVATIONS_CACHE.clear()
 
 
 def _prepared_class4_observations(
@@ -233,9 +246,16 @@ def create_class4_observations_dataframe(
     )
 
 
+def sea_surface_height_shift(challenger_dataset: xarray.Dataset) -> float:
+    if challenger_dataset.attrs.get(SEA_SURFACE_HEIGHT_DATUM_ATTRIBUTE) == GLORYS_SEA_SURFACE_HEIGHT_DATUM:
+        return GLORYS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+
+
 def _convert_forecast_ssh_to_sla(
     model_variable: xarray.DataArray,
     variable_key: str,
+    mean_sea_surface_height_shift: float = REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
 ) -> xarray.DataArray:
     if variable_key != Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key():
         return model_variable
@@ -246,7 +266,7 @@ def _convert_forecast_ssh_to_sla(
         load_mean_dynamic_topography(resolution),
         model_variable,
     )
-    return model_variable - mean_dynamic_topography - REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT
+    return model_variable - mean_dynamic_topography - mean_sea_surface_height_shift
 
 
 def _mean_dynamic_topography_on_challenger_grid(
@@ -277,8 +297,9 @@ def _mean_dynamic_topography_on_challenger_grid(
 def prepare_class4_model_variable(
     model_variable: xarray.DataArray,
     variable_key: str,
+    mean_sea_surface_height_shift: float = REANALYSIS_MEAN_SEA_SURFACE_HEIGHT_SHIFT,
 ) -> xarray.DataArray:
-    return _convert_forecast_ssh_to_sla(model_variable, variable_key)
+    return _convert_forecast_ssh_to_sla(model_variable, variable_key, mean_sea_surface_height_shift)
 
 
 def _bracketing_level_indices(
@@ -435,12 +456,40 @@ def _assign_model_values_for_first_day(
         )
 
 
+def _model_data_down_to_observed_depths(
+    model_data: xarray.DataArray,
+    observation_depths: numpy.ndarray,
+) -> xarray.DataArray:
+    """
+    The model levels down to the one that brackets the deepest observation, the only ones the vertical
+    interpolation reads, so that the levels below are never loaded (e.g. 50 levels for surface drifters).
+    """
+    model_depths = model_data[Dimension.DEPTH.key()].values
+    if len(model_depths) <= 2 or len(observation_depths) == 0:
+        return model_data
+    deepest_observation = numpy.max(observation_depths)
+    sort_order = numpy.argsort(model_depths)
+    sorted_depths = model_depths[sort_order]
+    if not deepest_observation <= sorted_depths[-1]:
+        # Below the deepest level, or a missing depth: the brackets use the deepest level.
+        return model_data
+    # Every bracket index is at most the insertion index of the deepest observation; at least two levels are kept
+    # so that the interpolation takes the same path.
+    deepest_needed_index = max(int(numpy.searchsorted(sorted_depths, deepest_observation)), 1)
+    if deepest_needed_index >= len(sorted_depths) - 1:
+        return model_data
+    kept_levels = numpy.sort(sort_order[: deepest_needed_index + 1])
+    return model_data.isel({Dimension.DEPTH.key(): kept_levels})
+
+
 def _interpolate_model_to_observations(
     model_data: xarray.DataArray,
     observations_dataframe: pandas.DataFrame,
 ) -> numpy.ndarray:
     observations_dataframe = observations_dataframe.reset_index(drop=True)
-    model_data = _model_data_with_depth_dimension(model_data)
+    model_data = _model_data_down_to_observed_depths(
+        _model_data_with_depth_dimension(model_data), observations_dataframe[Dimension.DEPTH.key()].values
+    )
     model_depths = model_data[Dimension.DEPTH.key()].values
     first_days = model_data[Dimension.FIRST_DAY_DATETIME.key()].values
     lead_days = model_data[Dimension.LEAD_DAY_INDEX.key()].values

@@ -1,0 +1,542 @@
+/*
+SPDX-FileCopyrightText: 2026 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+/* JS-CONTROLLED SELECTORS: app.js writes data-theme and data-scope on <html>, and
+   data-layout / data-display on .panel-grid; the rules below hide, show and lay out from
+   those values. The classes app.js toggles are .active, .collapsed, .loading,
+   .head-only, .psd-disabled, .trajectory-ready and .resizing-layout: those carry
+   behaviour, not decoration, and are not safe to delete as unused.
+
+   Every value here comes from tokens.css. One style per control role:
+     segmented control  .segmented > .ghost-button
+     button             .ghost-button (quiet), .ghost-button.primary
+     select             select (appearance none, one chevron)
+     help icon button   .method-note-btn
+     chip or readout    .chip, .panel-readout, .layer-info (no border)
+     collapse handle    .drawer-tab */
+
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--w-regular);
+  line-height: var(--ob-line-body);
+  color: var(--text);
+  background: var(--background);
+}
+
+h1, h2, h3, h4 { font-size: inherit; font-weight: var(--w-strong); margin: 0; }
+:focus-visible { outline: var(--focus-width) solid var(--accent); outline-offset: var(--hairline); }
+
+/* ---- app bar: one row on the panel padding ---------------------------------- */
+.app-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding: var(--s2) var(--pad);
+  border-bottom: var(--hairline) solid var(--border);
+  background: var(--surface);
+}
+.brand-title { display: flex; align-items: center; gap: var(--s4); min-width: 0; }
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: var(--w-strong);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-brand img { width: var(--ob-viewer-brand-icon); height: var(--ob-viewer-brand-icon); }
+.title { min-width: 0; }
+.title h1 { font-size: var(--text-lg); font-weight: var(--w-regular); color: var(--muted); }
+.header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2) var(--s3); flex: 1 1 auto; min-width: 0; }
+.header-utility { display: flex; align-items: center; gap: var(--s1); margin-left: auto; }
+.site-link { text-decoration: none; display: inline-flex; align-items: center; }
+.viewer-embedded .brand-title,
+.viewer-embedded .site-link { display: none; }
+.viewer-embedded .app-bar { display: none; }
+.bar-end > #about-toggle { order: 2; }
+
+/* ---- button ---------------------------------------------------------------- */
+.ghost-button {
+  font: inherit;
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--ob-line-tight);
+  height: var(--control-height);
+  padding: 0 var(--s3);
+  color: var(--text);
+  background: var(--surface);
+  border: var(--hairline) solid var(--control-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ghost-button:hover { background: var(--surface-strong); }
+.ghost-button.active,
+.ghost-button[aria-pressed="true"] {
+  color: var(--text);
+  font-weight: var(--w-strong);
+  background: var(--active-bg);
+  border-color: var(--active-border);
+}
+/* Quiet button: no border or fill until hovered. Used for the bar utilities and
+   tertiary actions. */
+.header-utility .ghost-button,
+.ghost-button.quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.header-utility .ghost-button:hover,
+.ghost-button.quiet:hover { color: var(--text); background: var(--surface-strong); }
+
+/* ---- segmented control ----------------------------------------------------- */
+.segmented { display: inline-flex; }
+.segmented .ghost-button { border-radius: 0; margin-left: calc(-1 * var(--hairline)); position: relative; }
+.segmented .ghost-button:first-of-type { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.segmented .ghost-button:last-of-type { border-radius: 0 var(--radius) var(--radius) 0; }
+.segmented .ghost-button.active,
+.segmented .ghost-button:focus-visible { z-index: var(--ob-z-base); }
+
+/* ---- workspace: three columns, shared top and bottom edges ---------------- */
+.workspace {
+  --controls-width: var(--ob-viewer-controls-width);
+  --rail-width: var(--ob-viewer-rail-width);
+  --controls-open-width: var(--ob-viewer-controls-width);
+  --rail-open-width: var(--ob-viewer-rail-width);
+  --drawer-tab-width: var(--ob-viewer-drawer-tab-width);
+  position: relative;
+  display: grid;
+  grid-template-columns: 0 minmax(0, 1fr) var(--rail-width);
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.drawer {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: var(--surface);
+}
+.drawer-left { grid-row: 2; grid-column: 1; border-right: var(--hairline) solid var(--border); }
+.map-area { grid-row: 2; grid-column: 2; }
+.workspace > .control-bar { grid-row: 1; grid-column: 1 / -1; }
+.drawer-right { grid-row: 2; grid-column: 3; border-left: var(--hairline) solid var(--border); }
+.drawer-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.drawer.collapsed > .drawer-body,
+.drawer.collapsed > .drawer-resizer { display: none; }
+
+.drawer-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--hairline);
+  z-index: var(--ob-z-handle);
+  touch-action: none;
+  cursor: col-resize;
+  background: transparent;
+}
+.drawer-left .drawer-resizer { right: calc(-1 * var(--hairline)); }
+.drawer-right .drawer-resizer { left: calc(-1 * var(--hairline)); }
+.drawer-resizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: calc(-1 * var(--ob-viewer-resizer-hit)); right: calc(-1 * var(--ob-viewer-resizer-hit)); }
+.drawer-resizer:hover,
+.drawer-resizer.active { background: var(--accent); }
+body.resizing-layout { cursor: col-resize; user-select: none; }
+
+/* ---- collapse handle ------------------------------------------------------- */
+.drawer-tab {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--ob-viewer-handle-width);
+  height: var(--ob-viewer-handle-height);
+  z-index: var(--ob-z-handle);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-md);
+  line-height: 1;
+  color: var(--muted);
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  cursor: pointer;
+}
+.drawer-tab:hover { color: var(--text); background: var(--surface-strong); }
+.drawer-left .drawer-tab { right: calc(-1 * var(--hairline)); border-right: 0; border-radius: var(--radius) 0 0 var(--radius); }
+.drawer-right .drawer-tab { left: calc(-1 * var(--hairline)); border-left: 0; border-radius: 0 var(--radius) var(--radius) 0; }
+.drawer.collapsed > .drawer-tab {
+  inset: 0;
+  width: auto;
+  height: auto;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+}
+.drawer-left .drawer-tab::before { content: "\2039"; }
+.drawer-right .drawer-tab::before { content: "\203A"; }
+.drawer-left.collapsed .drawer-tab::before { content: "\203A"; }
+.drawer-right.collapsed .drawer-tab::before { content: "\2039"; }
+
+/* ---- control bar above the map: one row that reads like a sentence --------- */
+.drawer-left[hidden] { display: none; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--pad);
+  border-bottom: var(--hairline) solid var(--border);
+  background: var(--surface);
+  position: relative;
+  z-index: var(--ob-z-popover);
+}
+.bar-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); min-width: 0; }
+.bar-group label, .bar-region { display: flex; align-items: center; }
+.bar-forecast { display: inline-flex; align-items: center; gap: var(--s2); }
+.bar-forecast:empty { display: none; }
+.control-bar:has(.layout-switch [data-layout="1"].active) #bar-forecast-1,
+.control-bar:has(.layout-switch [data-layout="1"].active) .panel-variable[data-index="1"],
+.workspace:has(.panel-grid[data-display="diff"]) .panel-variable[data-index="1"] { display: none; }
+.control-bar select { max-width: var(--ob-viewer-select-max); field-sizing: content; }
+.control-bar .segmented .ghost-button { padding: 0 var(--s2); }
+
+.control-bar .panel-forecast-label { font-size: var(--text-sm); font-weight: var(--w-regular); color: var(--muted); }
+.control-bar .panel-forecast-label::before { display: none; }
+.control-bar .panel-dataset { border-bottom: var(--ob-viewer-series-rule) solid var(--forecast-color, var(--border)); }
+.bar-label { font-size: var(--text-sm); color: var(--muted); }
+.bar-forecasts .layout-switch .ghost-button { min-width: var(--control-height); padding: 0 var(--s2); }
+.bar-forecasts > .bar-variable { display: contents; }
+.bar-more { position: relative; }
+.bar-more > summary { list-style: none; display: inline-flex; align-items: center; }
+.bar-more > summary::-webkit-details-marker { display: none; }
+.bar-more[open] > summary { font-weight: var(--w-strong); background: var(--active-bg); border-color: var(--active-border); }
+.bar-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--s1));
+  width: var(--ob-viewer-rail-width);
+  max-width: calc(100vw - var(--s5));
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--overlay-shadow);
+  z-index: 1; /* above the absolute overlay note that follows it in the bar */
+}
+.bar-more-menu #reset-view { align-self: flex-start; }
+.bar-note { flex: 1 0 100%; margin: 0; }
+.bar-note:empty, .bar-note[hidden] { display: none; }
+.control-bar .period-field { display: flex; align-items: center; gap: var(--s2); }
+.control-bar .period-range { display: flex; align-items: center; gap: var(--s2); font-size: var(--text-sm); color: var(--muted); }
+.control-bar .period-range[hidden] { display: none; }
+.control-bar .period-range input[type="date"] {
+  font: inherit;
+  font-size: var(--text-md);
+  height: var(--control-height);
+  padding: 0 var(--s2);
+  color: var(--text);
+  background: var(--surface);
+  border: var(--hairline) solid var(--control-border);
+  border-radius: var(--radius);
+}
+:root[data-theme="dark"] .control-bar .period-range input[type="date"] { color-scheme: dark; }
+.panel.head-only { display: none; }
+
+/* ---- More menu body: section labels, one label gap, one group gap ---------- */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--group-gap);
+  padding: var(--pad);
+}
+.controls-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.section-label,
+.rail-title {
+  font-size: var(--text-sm);
+  font-weight: var(--w-strong);
+  letter-spacing: var(--ob-tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+.scope-switch .ghost-button { padding: 0 var(--s3); }
+
+/* No position here: an id rule would beat the bar's absolute note and push the bar groups to zero width. */
+
+/* Room for the load bar is always kept, so the note row (and the maps under it) never
+   changes height when a load starts or ends. */
+#overlay-note { padding-bottom: calc(var(--s1) + var(--ob-viewer-progress-height) + var(--s1)); }
+.note-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--ob-viewer-progress-height);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+.note-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+.note-progress.indeterminate .note-progress-fill {
+  width: 35%;
+  animation: note-progress-slide 1.1s linear infinite;
+}
+@keyframes note-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+:root:not([data-scope="year"]) .period-field { display: none !important; }
+:root[data-scope="year"] .start-date-field,
+:root[data-scope="year"] #currents-group,
+:root[data-scope="year"] .overlay-field,
+:root:not([data-scope="year"]) #period-note,
+:root[data-scope="year"] #eddy-reference-field,
+:root[data-scope="year"] #overlay-note,
+:root[data-scope="year"] .overlay-section-label,
+:root[data-scope="year"] #rail-spectra-section,
+:root[data-scope="year"] #rail-trajectory-section { display: none !important; }
+
+.controls label,
+.controls .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--label-gap);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.controls label.toggle { flex-direction: row; align-items: center; gap: var(--s2); font-size: var(--text-md); color: var(--text); }
+
+/* ---- select ---------------------------------------------------------------- */
+.controls select,
+.control-bar select,
+.panel-head select {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  font-size: var(--text-md);
+  line-height: var(--ob-line-tight);
+  height: var(--control-height);
+  padding: 0 var(--ob-viewer-select-chevron) 0 var(--s2);
+  color: var(--text);
+  background-color: var(--surface);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-size: var(--s2) var(--s1);
+  background-position: right var(--s2) center;
+  border: var(--hairline) solid var(--control-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+:root[data-theme="dark"] .controls select,
+:root[data-theme="dark"] .control-bar select,
+:root[data-theme="dark"] .panel-head select { color-scheme: dark; }
+.controls select:hover,
+.control-bar select:hover,
+.panel-head select:hover { background-color: var(--surface-strong); }
+
+.controls-footer {
+  margin-top: auto;
+  padding-top: var(--pad);
+  border-top: var(--hairline) solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+}
+.controls input[type="range"] { accent-color: var(--accent); width: 100%; }
+.controls input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
+.period-range {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s1) var(--s2);
+}
+.period-range[hidden] { display: none; }
+.controls .period-range label { display: block; }
+.controls .period-range input[type="date"] {
+  font: inherit;
+  font-size: var(--text-md);
+  height: var(--control-height);
+  min-width: 0;
+  width: 100%;
+  padding: 0 var(--s2);
+  color: var(--text);
+  background: var(--surface);
+  border: var(--hairline) solid var(--control-border);
+  border-radius: var(--radius);
+}
+:root[data-theme="dark"] .controls .period-range input[type="date"] { color-scheme: dark; }
+.control-group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.control-group legend { font-size: var(--text-sm); font-weight: var(--w-strong); letter-spacing: var(--ob-tracking-label); text-transform: uppercase; color: var(--muted); padding: 0; margin-bottom: var(--s3); }
+.lead-value { color: var(--muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.hint { color: var(--muted); font-size: var(--text-xs); line-height: var(--ob-line-body); margin: 0; }
+kbd { font-family: inherit; font-size: var(--text-xs); background: var(--surface-strong); border-radius: var(--radius); padding: 0 var(--s1); }
+
+/* ---- year metric switch ---------------------------------------------------- */
+.metric-switch { display: none !important; align-items: center; }
+:root[data-scope="year"] .metric-switch { display: inline-flex !important; }
+.metric-switch-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin-right: var(--s2);
+  align-self: center;
+}
+
+/* ---- help icon button ------------------------------------------------------ */
+.method-note-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ob-viewer-help-size);
+  height: var(--ob-viewer-help-size);
+  margin-left: var(--s1);
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--w-strong);
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: var(--hairline) solid var(--control-border);
+  border-radius: 50%;
+  cursor: help;
+  vertical-align: middle;
+  flex: 0 0 auto;
+}
+.method-note-btn:hover,
+.method-note-btn[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--active-bg);
+  border-color: var(--active-border);
+}
+
+.method-popover {
+  position: fixed;
+  z-index: var(--ob-z-modal);
+  max-width: var(--ob-viewer-popover-max);
+  padding: var(--s3);
+  font-size: var(--text-md);
+  line-height: var(--ob-line-body);
+  color: var(--text);
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--overlay-shadow);
+}
+.method-popover-title {
+  font-weight: var(--w-strong);
+  font-size: var(--text-md);
+  margin-bottom: var(--s1);
+  color: var(--text);
+}
+.method-popover-body { color: var(--muted); }
+.method-params {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: var(--s1) var(--s3);
+  margin: 0 0 var(--s2);
+  padding-bottom: var(--s2);
+  border-bottom: var(--hairline) solid var(--border);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.method-param { display: contents; }
+.method-param span { color: var(--muted); }
+.method-param strong { color: var(--text); font-weight: var(--w-strong); text-align: right; }
+
+/* Section labels sit one step further from the group above than groups sit apart. */
+.controls > .section-label { margin-top: var(--s2); }
+.controls > .section-label:first-child { margin-top: 0; }
+.controls > .section-label + * { margin-top: calc(var(--s2) - var(--group-gap)); }
+.field-label { font-size: var(--text-sm); color: var(--muted); }
+.hint-details summary { cursor: pointer; font-size: var(--text-sm); color: var(--muted); }
+
+/* ---- one-row bar: 8px inside a group, 24px between groups ----------------- */
+.control-bar { flex-wrap: nowrap; column-gap: var(--s5); }
+/* The overlay and period notes take a slim row of their own at the bottom of the bar:
+   the bar grows by the note's height (--bar-note-height, set by wireBarNotes) so the
+   note never covers the maps' name strips or the rail. */
+.control-bar { padding-bottom: calc(var(--s2) + var(--bar-note-height, 0px)); }
+.control-bar > .bar-note { position: absolute; left: var(--pad); right: var(--pad); bottom: 0; padding: 0 var(--s2) var(--s1); }
+.bar-group { flex-wrap: nowrap; }
+.bar-dates { flex-wrap: nowrap; }
+.bar-end { margin-left: auto; }
+.bar-variable .panel-variable[data-index="1"] { display: none; }
+.control-bar.separate-variable:has(.layout-switch [data-layout="2"].active) .bar-variable .panel-variable[data-index="1"] { display: inline-block; }
+.workspace:has(.panel-grid[data-display="diff"]) .bar-variable .panel-variable[data-index="1"] { display: none !important; }
+.layout-switch { align-items: center; }
+.layout-switch .segmented-label { margin-right: var(--s2); }
+.bar-chip {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding: var(--s1) var(--s2);
+  border-radius: var(--radius);
+  background: var(--surface-strong);
+  white-space: nowrap;
+}
+.bar-chip[hidden] { display: none; }
+.bar-filters, .bar-scores { display: none; }
+.bar-more-menu .toggle { display: flex; gap: var(--s2); align-items: center; }
+.bar-more-menu .bar-region,
+.bar-more-menu .overlay-field { display: flex; flex-direction: column; align-items: stretch; gap: var(--s1); }
+.bar-more-menu .metric-field { display: none; flex-direction: column; gap: var(--s1); }
+:root[data-scope="year"] .bar-more-menu .metric-field { display: flex; }
+.bar-more-menu .field-label { font-size: var(--text-sm); color: var(--muted); }
+.nav-tips summary { cursor: pointer; font-size: var(--text-sm); color: var(--muted); }
+.nav-tips p { margin: var(--s2) 0 0; }
+
+.bar-more-menu .bar-more-about { align-self: flex-start; }

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy
@@ -27,6 +28,7 @@ from oceanbench.core.remote_http import (
 
 OBSERVATIONS_FIRST_AVAILABLE_DATE = numpy.datetime64("2024-01-01")
 LOCAL_STAGE_OBSERVATIONS_KEY = "observations"
+OBSERVATION_FILE_DAYS_AFTER_OBSERVATION_DAY = 1
 OBSERVATIONS_STAGE_VERSION = "v5"
 OBSERVATIONS_BASIS_VERSION_ATTRIBUTE = "obs_basis_version"
 EXPECTED_OBSERVATIONS_BASIS_VERSION = "2024-v2.1.0"
@@ -291,13 +293,8 @@ def _selected_observations_dataset(
     )
 
 
-def observations(challenger_dataset: Dataset) -> Dataset:
-    lead_day_index_key = Dimension.LEAD_DAY_INDEX.key()
-    first_day_datetime_key = Dimension.FIRST_DAY_DATETIME.key()
-    first_day_datetimes = challenger_dataset[first_day_datetime_key].values
-    lead_days_count = challenger_dataset.sizes[lead_day_index_key]
-    first_day_dates = first_day_datetimes.astype("datetime64[D]")
-    first_challenger_day = first_day_dates.min()
+def _require_available_observations(first_day_datetimes: numpy.ndarray) -> None:
+    first_challenger_day = first_day_datetimes.astype("datetime64[D]").min()
     if first_challenger_day < OBSERVATIONS_FIRST_AVAILABLE_DATE:
         first_challenger_day_string = pandas.Timestamp(first_challenger_day).strftime("%Y-%m-%d")
         first_available_day_string = pandas.Timestamp(OBSERVATIONS_FIRST_AVAILABLE_DATE).strftime("%Y-%m-%d")
@@ -307,9 +304,60 @@ def observations(challenger_dataset: Dataset) -> Dataset:
             f"while challenger first_day_datetime starts on {first_challenger_day_string}."
         )
 
+
+def has_increasing_start_dates(challenger_dataset: Dataset) -> bool:
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    return first_day_datetimes.ndim == 1 and bool((first_day_datetimes[1:] > first_day_datetimes[:-1]).all())
+
+
+def observations_by_start(challenger_dataset: Dataset) -> Iterator[Dataset]:
+    """
+    The observations of each start date of ``challenger_dataset``, in increasing start date order, opened one
+    start date at a time, without holding the observations of every start date at once.
+
+    Each is the part of ``observations(challenger_dataset)`` of that start date: the day files of its forecast
+    window are opened with the next one, which also holds observations of the last day of the window, within
+    the days of ``observations(challenger_dataset)``.
+    """
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()]
+    _require_available_observations(first_day_datetimes.values)
+    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    last_observation_day = _last_forecast_day(first_day_datetimes.values.max(), lead_days_count)
+    return (
+        _observations(
+            first_day_datetimes.values[[start_index]],
+            lead_days_count,
+            min(
+                _last_forecast_day(first_day_datetimes.values[start_index], lead_days_count)
+                + pandas.Timedelta(days=OBSERVATION_FILE_DAYS_AFTER_OBSERVATION_DAY),
+                last_observation_day,
+            ),
+        )
+        for start_index in range(first_day_datetimes.size)
+    )
+
+
+def observations(challenger_dataset: Dataset) -> Dataset:
+    first_day_datetimes = challenger_dataset[Dimension.FIRST_DAY_DATETIME.key()].values
+    lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
+    _require_available_observations(first_day_datetimes)
+    return _observations(
+        first_day_datetimes, lead_days_count, _last_forecast_day(first_day_datetimes.max(), lead_days_count)
+    )
+
+
+def _last_forecast_day(first_day_datetime: numpy.datetime64, lead_days_count: int) -> pandas.Timestamp:
+    return pandas.Timestamp(first_day_datetime) + pandas.Timedelta(days=lead_days_count - 1)
+
+
+def _observations(
+    first_day_datetimes: numpy.ndarray,
+    lead_days_count: int,
+    last_observation_day: pandas.Timestamp,
+) -> Dataset:
     first_day_timestamps = pandas.to_datetime(first_day_datetimes)
     first_day_start = first_day_timestamps.min().strftime("%Y-%m-%d")
-    last_day_end = (first_day_timestamps.max() + pandas.Timedelta(days=lead_days_count - 1)).strftime("%Y-%m-%d")
+    last_day_end = last_observation_day.strftime("%Y-%m-%d")
     observation_days = numpy.array(generate_dates(first_day_start, last_day_end, 1), dtype="datetime64[D]")
     local_stage_path = _observations_stage_path(first_day_timestamps, first_day_start, last_day_end, lead_days_count)
 

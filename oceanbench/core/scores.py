@@ -40,6 +40,9 @@ METRIC_FUNCTION_NAMES = [
     "rmsd_of_geostrophic_currents_compared_to_glo12_analysis",
     "deviation_of_lagrangian_trajectories_compared_to_glo12_analysis",
 ]
+GRIDDED_METRIC_FUNCTION_NAMES = [
+    name for name in METRIC_FUNCTION_NAMES if name.startswith("rmsd_of_") and name != CLASS4_METRIC_FUNCTION_NAME
+]
 
 _LABEL_PATTERN = re.compile(r"^(.*?) \(([^)]*)\) \[([^\]]*)\]\{([^}]+)\}$")
 _LEAD_DAY_PATTERN = re.compile(r"^Lead day (\d+)$")

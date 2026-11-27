@@ -40,6 +40,7 @@ challenger_dataset = xarray.Dataset(
 """
 
 REFERENCE_OPENER_NAMES = ["glorys_reanalysis_dataset", "glo12_analysis_dataset", "observations"]
+START_REFERENCE_OPENER_NAMES = ["observations_by_start"]
 
 
 def _asset_key(opener_name: str, challenger_dataset) -> tuple:
@@ -61,6 +62,14 @@ def _record_asset_openers(monkeypatch, module, opened_assets: set) -> None:
             return challenger_dataset
 
         monkeypatch.setattr(module, opener_name, record_reference)
+    for opener_name in START_REFERENCE_OPENER_NAMES:
+
+        def record_start_references(challenger_dataset, opener_name=opener_name):
+            assert current_runtime_configuration().staged_components == (STAGE_ALL_KEY,)
+            opened_assets.add(_asset_key(opener_name, challenger_dataset))
+            return iter([])
+
+        monkeypatch.setattr(module, opener_name, record_start_references)
     monkeypatch.setattr(module, "ocean_mask", lambda: opened_assets.add(("ocean_mask",)))
 
 
@@ -85,7 +94,12 @@ def test_stage_command_stages_every_asset_and_computes_nothing(challenger_file, 
         "load_mean_dynamic_topography",
         lambda resolution: staged_assets.add(("mean_dynamic_topography", resolution)),
     )
-    for metric_computation in ("rmsd", "rmsd_class4_validation", "deviation_of_lagrangian_trajectories"):
+    for metric_computation in (
+        "rmsd",
+        "class4_rmsd_and_matchups",
+        "class4_rmsd_and_matchups_by_start",
+        "deviation_of_lagrangian_trajectories",
+    ):
         monkeypatch.setattr(core_metrics, metric_computation, _forbid)
     monkeypatch.setattr(cli, "cleanup_local_stage_directory", _forbid)
     stage_directory = tmp_path / "stage"
@@ -98,7 +112,7 @@ def test_stage_command_stages_every_asset_and_computes_nothing(challenger_file, 
     assert staged_assets == {
         ("glorys_reanalysis_dataset", *reference_key),
         ("glo12_analysis_dataset", *reference_key),
-        ("observations", *reference_key),
+        ("observations_by_start", *reference_key),
         ("mean_dynamic_topography", "quarter_degree"),
         ("ocean_mask",),
     }
@@ -118,13 +132,14 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     _record_asset_openers(monkeypatch, core_metrics, metric_assets)
     for computation in (
         "rmsd",
-        "rmsd_class4_validation",
         "deviation_of_lagrangian_trajectories",
         "compute_mixed_layer_depth",
         "compute_geostrophic_currents",
         "_lagrangian_particle_count",
     ):
         monkeypatch.setattr(core_metrics, computation, lambda *args, **kwargs: None)
+    monkeypatch.setattr(core_metrics, "class4_rmsd_and_matchups", lambda *args, **kwargs: (None, None))
+    monkeypatch.setattr(core_metrics, "class4_rmsd_and_matchups_by_start", lambda *args, **kwargs: (None, None))
     challenger_namespace: dict = {}
     exec(CHALLENGER_CODE, challenger_namespace)
     metric_functions = [
@@ -135,7 +150,7 @@ def test_stage_command_opens_the_same_assets_as_the_metrics(challenger_file, mon
     for metric_function in metric_functions:
         metric_function(challenger_namespace["challenger_dataset"])
 
-    assert len(metric_functions) == 9
+    assert len(metric_functions) == 10
     assert metric_assets == staged_assets
 
 
