@@ -126,6 +126,22 @@ CATALOG_ENTRIES = (
         "GLO12 persistence forecasts",
         "public/baseline-forecasts/persistence/{first_day}.zarr",
     ),
+    _challenger("climatology", "GLORYS climatology", "public/baseline-forecasts/climatology/{first_day}.zarr"),
+    CatalogEntry(
+        identifier="challenger-glorys",
+        collection=Collection.CHALLENGERS,
+        title="GLORYS reanalysis as a challenger",
+        description="GLORYS reanalysis from Copernicus Marine scored as a challenger, its lead days the valid dates.",
+        library_functions=("oceanbench.datasets.challenger.glorys",),
+        source=CopernicusMarineDatasets("GLOBAL_MULTIYEAR_PHY_001_030", (GLORYS_REANALYSIS_DATASET_IDENTIFIER,)),
+        temporal_extent=TemporalExtent(BENCHMARK_FIRST_DAY, REFERENCE_LAST_DAY),
+    ),
+    _challenger(
+        "glorys_1_degree",
+        "GLORYS reanalysis at 1° as a challenger",
+        "public/glorys_1degree_2024_V2/{first_day}.zarr",
+        OneDegreeVariant.UNAVAILABLE,
+    ),
     CatalogEntry(
         identifier="reference-glorys-reanalysis",
         collection=Collection.REFERENCES,
