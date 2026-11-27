@@ -191,16 +191,11 @@ def evaluate_challenger(
     )
 
 
-# Gridded metrics against the two references, computed in one pass so that the challenger is read once for both,
-# and its mixed layer depth and geostrophic currents computed once for both.
-# Not the variables: their two passes together keep the 1/12 degree challenger in memory (12 GB for one start).
-GRIDDED_METRICS_COMPUTED_TOGETHER = [
-    [
-        f"rmsd_of_{quantity}_compared_to_glorys_reanalysis",
-        f"rmsd_of_{quantity}_compared_to_glo12_analysis",
-    ]
-    for quantity in ("mixed_layer_depth", "geostrophic_currents")
-]
+# Gridded metrics computed in one pass with another metric (each group in the order of METRIC_FUNCTION_NAMES).
+# None: a pass shared by the GLORYS and GLO12 metrics of the mixed layer depth or of the geostrophic currents keeps
+# the challenger quantity of every start date until the second reference is reached, so its memory grows with the
+# number of start dates; each metric is computed in its own pass.
+GRIDDED_METRICS_COMPUTED_TOGETHER: list[list[str]] = []
 
 
 def _metrics_computed_together(metric_function_name: str) -> list[str] | None:
