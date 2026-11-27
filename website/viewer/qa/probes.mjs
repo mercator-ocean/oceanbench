@@ -457,6 +457,7 @@ export async function probeMenuAboveHandles(context, baseUrl, viewerUrlPath, fai
 // P8: every overlay opened from More keeps the More menu, the bar note and the bar groups
 // fully on screen, at desktop, laptop and phone widths. Choosing an overlay used to let
 // the note take the whole bar row, which threw More (and its menu) off the left edge.
+// The note must also leave the maps' name strips uncovered.
 export async function probeOverlayPanelsInViewport(browser, baseUrl, viewerUrlPath, failures) {
   const sizes = [
     { width: 1440, height: 900 },
@@ -488,6 +489,17 @@ export async function probeOverlayPanelsInViewport(browser, baseUrl, viewerUrlPa
             return inside ? [] : [`${selector} at ${Math.round(box.left)},${Math.round(box.top)}-${Math.round(box.right)},${Math.round(box.bottom)}`];
           });
         });
+        const covered = await page.evaluate(() => {
+          const note = document.querySelector("#overlay-note");
+          if (!note || note.offsetParent === null || !note.textContent.trim()) return [];
+          const n = note.getBoundingClientRect();
+          return [...document.querySelectorAll(".panel-chips")]
+            .filter((strip) => strip.offsetParent !== null)
+            .map((strip) => strip.getBoundingClientRect())
+            .filter((b) => b.width > 0 && b.left < n.right && n.left < b.right && b.top < n.bottom - 0.5 && n.top < b.bottom - 0.5)
+            .map((b) => `name strip at ${Math.round(b.left)},${Math.round(b.top)} under the note`);
+        });
+        for (const entry of covered) failures.push(`overlay note covers a map (${viewport.width}x${viewport.height}, ${mode}): ${entry}`);
         for (const entry of outside) failures.push(`overlay panel off screen (${viewport.width}x${viewport.height}, ${mode}): ${entry}`);
       }
     } catch (error) {

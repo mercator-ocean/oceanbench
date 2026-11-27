@@ -302,9 +302,10 @@ body.resizing-layout { cursor: col-resize; user-select: none; }
 .scope-switch .ghost-button { padding: 0 var(--s3); }
 
 /* No position here: an id rule would beat the bar's absolute note and push the bar groups to zero width. */
-#overlay-note { min-height: 2lh; }
-#overlay-note:empty { min-height: 0; }
 
+/* Room for the load bar is always kept, so the note row (and the maps under it) never
+   changes height when a load starts or ends. */
+#overlay-note { padding-bottom: calc(var(--s1) + var(--ob-viewer-progress-height) + var(--s1)); }
 .note-progress {
   position: absolute;
   left: 0;
@@ -506,7 +507,11 @@ kbd { font-family: inherit; font-size: var(--text-xs); background: var(--surface
 
 /* ---- one-row bar: 8px inside a group, 24px between groups ----------------- */
 .control-bar { flex-wrap: nowrap; column-gap: var(--s5); }
-.control-bar > .bar-note { position: absolute; left: var(--pad); right: var(--pad); top: 100%; padding: var(--s1) var(--s2); background: var(--surface); border-bottom: var(--hairline) solid var(--border); }
+/* The overlay and period notes take a slim row of their own at the bottom of the bar:
+   the bar grows by the note's height (--bar-note-height, set by wireBarNotes) so the
+   note never covers the maps' name strips or the rail. */
+.control-bar { padding-bottom: calc(var(--s2) + var(--bar-note-height, 0px)); }
+.control-bar > .bar-note { position: absolute; left: var(--pad); right: var(--pad); bottom: 0; padding: 0 var(--s2) var(--s1); }
 .bar-group { flex-wrap: nowrap; }
 .bar-dates { flex-wrap: nowrap; }
 .bar-end { margin-left: auto; }

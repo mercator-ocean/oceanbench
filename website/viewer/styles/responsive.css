@@ -76,7 +76,7 @@ SPDX-License-Identifier: EUPL-1.2
 /* Phone: forecasts on the first rows, then Variable and Filters; the rest opens in
    place under Filters, and the scores open as a bottom sheet from Scores. */
 @media (max-width: 50em) {
-  .control-bar { flex-wrap: wrap; row-gap: var(--s2); column-gap: var(--s2); padding: var(--s2) var(--s4); }
+  .control-bar { flex-wrap: wrap; row-gap: var(--s2); column-gap: var(--s2); padding: var(--s2) var(--s4) calc(var(--s2) + var(--bar-note-height, 0px)); }
   .bar-forecasts { flex: 1 0 100%; flex-wrap: wrap; }
   .bar-forecasts .display-switch { order: 4; }
   .bar-variable { flex: 1 1 0; }
