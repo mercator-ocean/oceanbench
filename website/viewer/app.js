@@ -5406,6 +5406,20 @@ function wireEmbeddedTheme() {
   if (window.parent !== window) window.parent.postMessage({ type: "oceanbench-viewer-ready" }, "*");
 }
 
+// The bar reserves a row for whichever note is showing, sized to the note itself, so a
+// note that wraps on a phone still pushes the maps down instead of covering them.
+function wireBarNotes() {
+  const bar = document.querySelector(".control-bar");
+  const notes = [...bar.querySelectorAll(":scope > .bar-note")];
+  const sync = () => {
+    const height = Math.max(0, ...notes.map((note) => note.offsetHeight));
+    bar.style.setProperty("--bar-note-height", `${Math.ceil(height)}px`);
+  };
+  const observer = new ResizeObserver(sync);
+  for (const note of notes) observer.observe(note);
+  sync();
+}
+
 // The muted chip beside More says which of its settings are off their defaults.
 function updateStateChip() {
   const chip = document.getElementById("bar-state-chip");
@@ -5420,6 +5434,7 @@ function updateStateChip() {
 // Bar controls added by the one-row layout: the F2 variable toggle, the phone Filters
 // and Scores buttons, and, when embedded, the About button moved off the hidden logo row.
 function wireBarExtras() {
+  wireBarNotes();
   const bar = document.querySelector(".control-bar");
   const separate = document.getElementById("separate-variable");
   const syncSeparate = () => {

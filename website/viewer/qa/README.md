@@ -61,7 +61,7 @@ Runs once per invocation, in one browser context at 1440x900 dpr 1, after the ma
 - **Colour-range monotonicity (P3).** Sweeps lead 1 to 10 and requires the drawn colour range to grow and never shrink while the selection signature is unchanged. This is the grow-only property in `modules/stable-ranges.js`, which is otherwise purely visual and throws no errors when it breaks.
 - **Particle liveness (P5).** With playback on, two samples 600ms apart must differ; with playback off, they must be identical. Catches the premultiplied-alpha fade stall documented in `modules/particles.js`.
 - **Software inflate equivalence (P6).** One state re-rendered with `DecompressionStream` deleted, forcing the software DEFLATE decoder in `modules/zarr.js`, and required to produce the same pixels as the native path.
-- **Overlay panels on screen (P8).** At 1440x900, 1280x720 and 390x844, opens More and selects each map overlay in turn, then requires the More button, the More menu and the overlay note to lie fully inside the viewport.
+- **Overlay panels on screen (P8).** At 1440x900, 1280x720 and 390x844, opens More and selects each map overlay in turn, then requires the More button, the More menu and the overlay note to lie fully inside the viewport, and the note to cover no map name strip.
 
 ## Known behaviour
 
