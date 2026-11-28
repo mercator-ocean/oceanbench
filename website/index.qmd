@@ -45,6 +45,11 @@ Most challenger forecasts are produced by running each system at [Mercator Ocean
 
 For the 1 degree track, the interpolation method used for challengers, the corresponding reference datasets, and the exact implementation paths are documented [here](documentation/one-degree-track/index.qmd).
 
+```{=html}
+<link rel="stylesheet" href="ocean-arena/ocean-arena.css">
+<div class="ocean-arena" data-version="flat"></div>
+```
+
 {{< include _scores-data.html >}}
 
 ::: {#all-scores}
@@ -80,6 +85,11 @@ Implemented by [Mercator Ocean International](https://www.mercator-ocean.eu/).
 <script src="vendor/d3-geo.v3.min.js"></script>
 <script src="vendor/topojson-client.v3.min.js"></script>
 <script src="region-globe.js"></script>
+<script src="vendor/globe.gl.v2.min.js"></script>
+<script src="vendor/h3-js.v4.umd.js"></script>
+<script src="ocean-arena/challengers.js"></script>
+<script src="ocean-arena/ocean-arena-common.js"></script>
+<script src="ocean-arena/flat-globe.js"></script>
 <script src="your-scores.js"></script>
 <script src="interactive-scores.js"></script>
 ```

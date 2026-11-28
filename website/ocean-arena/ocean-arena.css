@@ -1,0 +1,112 @@
+/*
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+*/
+
+.ocean-arena {
+  position: relative; overflow: hidden; height: 80vh; min-height: 520px;
+  border-radius: 20px; margin: 1.5rem 0;
+  font-family: "Space Grotesk", system-ui, sans-serif; color: var(--text);
+  background: radial-gradient(ellipse at center, #0b1d3a 0%, #02060f 70%);
+  --panel: rgba(8, 16, 32, 0.72);
+  --border: rgba(120, 200, 255, 0.18);
+  --text: #e6f1ff;
+  --muted: #8aa4c4;
+}
+
+.ocean-arena-globe { position: absolute; inset: 0; }
+
+.ocean-arena-header {
+  margin: 0; border: 0; padding: 0;
+  position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+  text-align: center; pointer-events: none;
+}
+.ocean-arena-header h1 { margin: 0; color: var(--text); font-size: 2.6rem; letter-spacing: 0.04em; }
+.ocean-arena-header h1 span {
+  background: linear-gradient(90deg, #4fd1ff, #a78bfa);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.ocean-arena-header p { margin: 6px 0 0; color: var(--muted); }
+
+.ocean-arena aside {
+  position: absolute; padding: 18px; border-radius: 16px;
+  background: var(--panel); border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+.ocean-arena aside h2 {
+  margin-top: 0; border: 0; padding: 0;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.15em;
+  color: var(--muted); margin-bottom: 8px;
+}
+
+.ocean-arena-controls { left: 24px; top: 50%; transform: translateY(-50%); display: grid; gap: 18px; }
+.ocean-arena-pills { display: flex; flex-wrap: wrap; gap: 6px; max-width: 260px; }
+.ocean-arena-pills button {
+  font: inherit; font-size: 0.85rem; color: var(--text); cursor: pointer;
+  padding: 6px 12px; border-radius: 999px;
+  background: transparent; border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+.ocean-arena-pills button:hover { border-color: #4fd1ff; }
+.ocean-arena-pills button.active {
+  background: linear-gradient(90deg, #4fd1ff, #a78bfa);
+  color: #02060f; font-weight: 600; border-color: transparent;
+  box-shadow: 0 0 16px rgba(79, 209, 255, 0.5);
+}
+
+.ocean-arena-leaderboard { right: 24px; top: 50%; transform: translateY(-50%); width: 260px; }
+.ocean-arena-leaderboard ol { list-style: none; padding: 0; display: grid; gap: 12px; }
+.ocean-arena-leaderboard li { display: grid; grid-template-columns: 1fr auto; gap: 4px; }
+.ocean-arena-leaderboard .name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.ocean-arena-leaderboard .swatch { width: 12px; height: 12px; border-radius: 3px; }
+.ocean-arena-leaderboard .share { font-variant-numeric: tabular-nums; }
+.ocean-arena-leaderboard .bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.ocean-arena-leaderboard .bar div { height: 100%; transition: width 0.8s cubic-bezier(.2,.8,.2,1); }
+.ocean-arena-leaderboard li:first-child .name::after { content: "👑"; }
+.ocean-arena-leaderboard small { display: block; margin-top: 14px; color: var(--muted); font-size: 0.7rem; }
+
+.ocean-arena-tooltip {
+  position: absolute; pointer-events: none; display: none;
+  padding: 10px 14px; border-radius: 10px; font-size: 0.85rem;
+  background: var(--panel); border: 1px solid var(--border); backdrop-filter: blur(8px);
+}
+.ocean-arena-tooltip .row { display: flex; justify-content: space-between; gap: 16px; }
+
+.ocean-arena-links {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 10px;
+}
+.ocean-arena-links a {
+  display: inline-block; font-size: 0.85rem;
+  color: var(--text); text-decoration: none; padding: 10px 20px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel);
+}
+.ocean-arena-links a:last-child { animation: ocean-arena-bounce 2s infinite; }
+@keyframes ocean-arena-bounce { 50% { transform: translateY(-6px); } }
+
+@media (max-width: 900px) {
+  .ocean-arena { height: 100svh; border-radius: 0; margin: 1rem calc(50% - 50vw); }
+  .ocean-arena-header { top: 12px; width: 100%; padding: 0 12px; }
+  .ocean-arena-header h1 { font-size: 1.6rem; }
+  .ocean-arena-header p { font-size: 0.8rem; }
+  .ocean-arena aside { padding: 10px; border-radius: 12px; }
+  .ocean-arena aside h2 { margin-bottom: 4px; }
+  .ocean-arena-controls {
+    left: 8px; right: 8px; top: auto; bottom: 8px; transform: none;
+    gap: 8px;
+  }
+  .ocean-arena-pills { max-width: none; flex-wrap: nowrap; overflow-x: auto; }
+  .ocean-arena-pills button { white-space: nowrap; font-size: 0.75rem; padding: 5px 10px; }
+  .ocean-arena-leaderboard {
+    right: 8px; left: 8px; top: 96px; transform: none; width: auto;
+  }
+  .ocean-arena-leaderboard ol { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .ocean-arena-leaderboard li { grid-template-columns: 1fr; font-size: 0.75rem; }
+  .ocean-arena-leaderboard .name { gap: 4px; }
+  .ocean-arena-leaderboard .name::after { display: none; }
+  .ocean-arena-leaderboard small, .ocean-arena-leaderboard h2 { display: none; }
+  .ocean-arena-links { top: 190px; bottom: auto; }
+  .ocean-arena-links a { padding: 4px 12px; font-size: 0.75rem; }
+  .ocean-arena-links a:last-child { display: none; }
+}

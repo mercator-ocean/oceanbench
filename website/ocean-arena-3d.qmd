@@ -1,0 +1,22 @@
+---
+title: "OceanBench Arena 3D"
+---
+
+<!--
+SPDX-FileCopyrightText: 2025 Mercator Ocean International <https://www.mercator-ocean.eu/>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
+```{=html}
+<link rel="stylesheet" href="ocean-arena/ocean-arena.css">
+<div class="ocean-arena" data-version="raised"></div>
+<script src="vendor/d3-array.v3.min.js"></script>
+<script src="vendor/d3-geo.v3.min.js"></script>
+<script src="vendor/topojson-client.v3.min.js"></script>
+<script src="vendor/globe.gl.v2.min.js"></script>
+<script src="vendor/h3-js.v4.umd.js"></script>
+<script src="ocean-arena/challengers.js"></script>
+<script src="ocean-arena/ocean-arena-common.js"></script>
+<script src="ocean-arena/raised-globe.js"></script>
+```

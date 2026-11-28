@@ -12,6 +12,8 @@ project:
     - python strip_index_from_links.py
   resources:
     - assets/land-110m.json
+    - assets/night-sky.png
+    - assets/earth-dark.jpg
     - assets/argo-profiler.svg
     - assets/drifter-buoy.svg
     - assets/satellite.svg
