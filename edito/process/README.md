@@ -69,11 +69,11 @@ The S3 variables EDITO injects are those of your EDITO storage: to write into an
 ## Year in several jobs
 
 A year does not fit in one job's memory and time for most models, so it can be split by start dates.
-Each `MODE=shard` job evaluates the `START_DATES` it is given, with the viewer data but without the maps, and also uploads `merge-inputs/` (the gridded scores and Lagrangian deviations of each start date and the Class IV match-ups).
+Each `MODE=shard` job evaluates the `START_DATES` it is given, with the viewer data but without the maps, and also uploads `merge-inputs/` (the gridded scores, missing fractions and Lagrangian deviations of each start date and the Class IV match-ups).
 Then one `MODE=merge` job, with the same `CHALLENGER` and no `START_DATES` (or all the start dates of the shards), reads the shards listed in `SHARD_PREFIXES`, writes the scores file of the year and builds the viewer data of the year, maps included, as one evaluation of all the start dates would (see `shards.py`).
 
 To add the eddy census alone to viewer data built without it, the `MODE=eddy` jobs detect the eddies of their `START_DATES` (only the sea surface height is read, no scores), then one `MODE=eddy-merge` job with `SHARD_PREFIXES` writes the eddy files of the year with their start index under `viewer/insights/<challenger>/<region>/`. Nothing else of the viewer data is written: `insights.json` is not, its `eddies` entry is set when the files are added to the published viewer data. Both modes need `VIEWER=true` and py-eddy-tracker (`OCEANBENCH_PY_EDDY_TRACKER_SPEC`).
-The shards must hold every start date of the challenger once, in order.
+The shards must hold every start date of the challenger once, in order. For `MODE=merge`, every shard but the last must hold an even number of start dates (for 52, for example 14, 14, 12 and 12): the geostrophic currents are computed by pairs of start dates, and the merged scores are then bit for bit the ones of one evaluation.
 
 ## Logs
 

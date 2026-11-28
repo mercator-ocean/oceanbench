@@ -165,23 +165,68 @@ def _masked_to_ocean(dataset: xarray.Dataset, ocean_mask: xarray.DataArray) -> x
     )
 
 
-def _missing_ocean_fraction(
+FORECAST_DIMENSIONS = [Dimension.FIRST_DAY_DATETIME.key(), Dimension.LEAD_DAY_INDEX.key()]
+
+
+class StartTables(list):
+    """
+    The score tables of each start date, in start date order, with ``merge_layout``: what a merge of several
+    evaluations, each on some of the start dates, needs to compute the scores of all the start dates exactly as one
+    evaluation would (the missing fraction of each start date and lead day, and the dask chunks of the means).
+    """
+
+    def __init__(self, tables, merge_layout: dict) -> None:
+        super().__init__(tables)
+        self.merge_layout = merge_layout
+
+
+def _missing_ocean_fraction_by_forecast(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
     ocean_mask: xarray.DataArray,
     variable_name: str,
 ) -> xarray.DataArray:
     spatial_dimensions = [Dimension.LATITUDE.key(), Dimension.LONGITUDE.key()]
-    forecast_dimensions = [Dimension.FIRST_DAY_DATETIME.key(), Dimension.LEAD_DAY_INDEX.key()]
     is_scorable = (
         _variable_ocean_mask(ocean_mask, challenger_dataset, variable_name) & reference_dataset[variable_name].notnull()
     )
     is_missing = is_scorable & challenger_dataset[variable_name].isnull()
-    return (
-        is_missing.where(is_scorable)
-        .weighted(_spatial_area_weights(challenger_dataset))
-        .mean(dim=spatial_dimensions)
-        .mean(dim=forecast_dimensions)
+    return is_missing.where(is_scorable).weighted(_spatial_area_weights(challenger_dataset)).mean(dim=spatial_dimensions)
+
+
+def _missing_ocean_fraction(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
+    variable_name: str,
+) -> xarray.DataArray:
+    return _missing_ocean_fraction_by_forecast(
+        challenger_dataset, reference_dataset, ocean_mask, variable_name
+    ).mean(dim=FORECAST_DIMENSIONS)
+
+
+def _missing_fractions_by_forecast(
+    challenger_dataset: xarray.Dataset,
+    reference_dataset: xarray.Dataset,
+    ocean_mask: xarray.DataArray,
+) -> xarray.Dataset:
+    return xarray.Dataset(
+        {
+            variable_name: _missing_ocean_fraction_by_forecast(
+                challenger_dataset, reference_dataset, ocean_mask, variable_name
+            )
+            for variable_name in challenger_dataset.data_vars
+        }
+    )
+
+
+def missing_fractions_over_forecasts(missing_fraction_by_forecast_dataset: xarray.Dataset) -> xarray.Dataset:
+    """The missing fraction of each variable over all start dates and lead days, from the one of each of them."""
+    return xarray.Dataset(
+        {
+            variable_name: missing_fraction_by_forecast_dataset[variable_name].mean(dim=FORECAST_DIMENSIONS)
+            for variable_name in missing_fraction_by_forecast_dataset.data_vars
+        }
     )
 
 
@@ -306,6 +351,11 @@ def _select_variables(dataset: xarray.Dataset, variables: list[Variable]) -> xar
     return dataset[[variable.key() for variable in variables]]
 
 
+def _chunks_by_dimension(array: xarray.DataArray) -> dict[str, tuple[int, ...]]:
+    chunks = array.chunks or tuple((size,) for size in array.shape)
+    return dict(zip(array.dims, chunks))
+
+
 def _lazy_rmsd(
     challenger_dataset: xarray.Dataset,
     reference_dataset: xarray.Dataset,
@@ -319,10 +369,11 @@ def _lazy_rmsd(
         prepared_challenger_dataset, _select_variables(_harmonise_dataset(reference_dataset), variables)
     )
     challenger_ocean_mask = _ocean_mask_on_challenger_grid(ocean_mask, prepared_challenger_dataset)
-    missing_fraction_dataset = _missing_fractions_computed_first_when_depth_resolved(
-        _missing_fractions(prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask)
+    lazy_missing_fraction_dataset = _missing_fractions(
+        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     )
     if not keep_start_tables:
+        missing_fraction_dataset = _missing_fractions_computed_first_when_depth_resolved(lazy_missing_fraction_dataset)
 
         def table(computed: tuple) -> pandas.DataFrame:
             computed_missing_fraction_dataset, computed_rmsd_dataset = computed
@@ -334,9 +385,38 @@ def _lazy_rmsd(
     rmsd_by_start_dataset = _rmsd_by_start(
         prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
     )
+    # The same missing fractions, kept by start date and lead day too, for merges of evaluations on some start dates.
+    missing_fraction_by_forecast_dataset = _missing_fractions_by_forecast(
+        prepared_challenger_dataset, prepared_reference_dataset, challenger_ocean_mask
+    )
+    merge_layout = {
+        "missing_fraction_chunks": {
+            name: _chunks_by_dimension(array) for name, array in missing_fraction_by_forecast_dataset.items()
+        },
+        "start_date_chunks": {
+            name: _chunks_by_dimension(array)[Dimension.FIRST_DAY_DATETIME.key()]
+            for name, array in rmsd_by_start_dataset.items()
+        },
+    }
+    missing_fraction_dataset = lazy_missing_fraction_dataset
+    if any(Dimension.DEPTH.key() in array.dims for array in lazy_missing_fraction_dataset.values()):
+        # Computed first, as without start tables, in one pass with the ones by start date and lead day.
+        missing_fraction_dataset, missing_fraction_by_forecast_dataset = dask.compute(
+            lazy_missing_fraction_dataset, missing_fraction_by_forecast_dataset
+        )
 
     def tables(computed: tuple) -> tuple[pandas.DataFrame, list[pandas.DataFrame]]:
-        computed_missing_fraction_dataset, computed_rmsd_dataset, computed_rmsd_by_start_dataset = computed
+        (
+            computed_missing_fraction_dataset,
+            computed_rmsd_dataset,
+            computed_rmsd_by_start_dataset,
+            computed_missing_fraction_by_forecast_dataset,
+        ) = computed
+        dataset_with_depth = (
+            _assign_depth_dimension(computed_rmsd_by_start_dataset)
+            if computed_rmsd_by_start_dataset.get(Dimension.DEPTH.key()) is None
+            else computed_rmsd_by_start_dataset
+        )
         start_tables = [
             _to_pretty_dataframe(
                 computed_rmsd_by_start_dataset.isel({Dimension.FIRST_DAY_DATETIME.key(): start_index}),
@@ -345,13 +425,23 @@ def _lazy_rmsd(
             )
             for start_index in range(computed_rmsd_by_start_dataset.sizes[Dimension.FIRST_DAY_DATETIME.key()])
         ]
+        layout = {
+            **merge_layout,
+            "missing_fraction_by_forecast": computed_missing_fraction_by_forecast_dataset,
+            "missing_fraction_cells": _scored_variable_depth_pairs(dataset_with_depth, variables),
+        }
         return (
             _to_pretty_dataframe(computed_rmsd_dataset, variables, computed_missing_fraction_dataset),
-            start_tables,
+            StartTables(start_tables, layout),
         )
 
     # The same graph for the mean as without start tables.
-    return (missing_fraction_dataset, _mean_over_starts(rmsd_by_start_dataset), rmsd_by_start_dataset), tables
+    return (
+        missing_fraction_dataset,
+        _mean_over_starts(rmsd_by_start_dataset),
+        rmsd_by_start_dataset,
+        missing_fraction_by_forecast_dataset,
+    ), tables
 
 
 def rmsd(

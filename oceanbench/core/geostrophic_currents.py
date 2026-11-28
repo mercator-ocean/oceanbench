@@ -25,13 +25,18 @@ def compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     return _compute_geostrophic_currents(_harmonise_dataset(dataset))
 
 
+# The start dates are computed by pairs. The sums over the start dates, done chunk by chunk, depend on these pairs: an
+# evaluation split by start dates gives the same scores as one evaluation when each part starts on a pair.
+START_DATES_PER_CHUNK = 2
+
+
 def _harmonise_dataset(dataset: xarray.Dataset) -> xarray.Dataset:
     return rename_dataset_with_standard_names(dataset)
 
 
 def _compute_geostrophic_currents(dataset: xarray.Dataset) -> xarray.Dataset:
     sea_surface_height = dataset[Variable.SEA_SURFACE_HEIGHT_ABOVE_GEOID.key()].chunk(
-        {Dimension.FIRST_DAY_DATETIME.key(): 2}
+        {Dimension.FIRST_DAY_DATETIME.key(): START_DATES_PER_CHUNK}
     )
     latitude = dataset[Dimension.LATITUDE.key()].values
     longitude = dataset[Dimension.LONGITUDE.key()].values

@@ -12,8 +12,11 @@ score tables of each start date, the Lagrangian deviations of each start date an
 ``merge`` opens the challenger with all the start dates of the shards and writes the scores file and the viewer data
 of the year, as one evaluation of all the start dates would:
 
-- gridded RMSD: the mean over the start dates of the RMSD of each start date (the missing fraction is the mean of
-  the shard values weighted by their number of start dates);
+- gridded RMSD: the mean over the start dates of the RMSD of each start date, and the missing fraction over all the
+  start dates and lead days, computed from the values of each start date as one evaluation computes them (same
+  dtype, same dask chunks, so the same sums in the same order: the merged scores are bit for bit the ones of one
+  evaluation). The geostrophic currents are computed by pairs of start dates, so every shard but the last must
+  hold an even number of start dates;
 - Lagrangian deviation: the mean over the start dates of the deviation of each start date;
 - Class IV: pooled again from the match-ups of all the start dates;
 - viewer data: built by ``build_viewer_data`` from the merged match-ups and score tables, maps included; the eddy
@@ -33,18 +36,22 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+import dask.array
 import numpy
 import pandas
+import xarray
 
 from oceanbench import metrics
-from oceanbench.core import evaluate, lagrangian_trajectory
+from oceanbench.core import evaluate, lagrangian_trajectory, rmsd
 from oceanbench.core.classIV import _rmsd_table_from_parts
 from oceanbench.core.classIV_matchups import Class4Matchups
 from oceanbench.core.classIV_support import format_class4_results
 from oceanbench.core.dataset_utils import Dimension
+from oceanbench.core.geostrophic_currents import START_DATES_PER_CHUNK
 from oceanbench.core.lagrangian_support import LAGRANGIAN_ROW_LABEL, mean_weekly_lagrangian_deviations
 from oceanbench.core.lead_day_utils import lead_day_labels
-from oceanbench.core.metrics import CLASS4_VARIABLES
+from oceanbench.core.metrics import CLASS4_VARIABLES, MESSAGE_COLUMN
+from oceanbench.core.rmsd import MISSING_FRACTION_COLUMN
 from oceanbench.core.scores import (
     CLASS4_METRIC_FUNCTION_NAME,
     GRIDDED_METRIC_FUNCTION_NAMES,
@@ -247,6 +254,16 @@ def _check_start_dates(shards: list[_Shard], year_start_dates: list[str]) -> Non
         )
 
 
+def _check_shard_sizes(shards: list[_Shard]) -> None:
+    sizes = [len(shard.start_dates) for shard in shards]
+    if any(size % START_DATES_PER_CHUNK for size in sizes[:-1]):
+        raise ValueError(
+            f"The shards hold {sizes} start dates: every shard but the last must hold a multiple of "
+            f"{START_DATES_PER_CHUNK} start dates, the start dates computed together, for the merged scores to be "
+            "the ones of one evaluation"
+        )
+
+
 def _merged_start_tables(shards: list[_Shard]) -> dict[str, list[pandas.DataFrame]]:
     names = [name for name in GRIDDED_METRIC_FUNCTION_NAMES if any(name in shard.start_tables for shard in shards)]
     for name in names:
@@ -255,27 +272,96 @@ def _merged_start_tables(shards: list[_Shard]) -> dict[str, list[pandas.DataFram
     return {name: [table for shard in shards for table in shard.start_tables[name]] for name in names}
 
 
-def _gridded_rows(metric_function_name: str, start_tables: list[pandas.DataFrame]) -> list[dict]:
-    rows_by_start = [score_rows(metric_function_name, table) for table in start_tables]
-    merged_rows = []
-    for position, row in enumerate(rows_by_start[0]):
-        start_rows = [rows[position] for rows in rows_by_start]
-        if any(
-            (start_row["standard_name"], start_row["depth"], start_row["lead_day"])
-            != (row["standard_name"], row["depth"], row["lead_day"])
-            for start_row in start_rows
-        ):
-            raise ValueError(f"{metric_function_name}: the start tables do not have the same rows")
-        values = numpy.array([numpy.nan if r["value"] is None else r["value"] for r in start_rows], dtype=float)
-        merged_row = dict(row)
-        merged_row["value"] = None if not numpy.isfinite(values).any() else float(numpy.nanmean(values))
-        if "missing_fraction" in row:
-            fractions = numpy.array(
-                [numpy.nan if r["missing_fraction"] is None else r["missing_fraction"] for r in start_rows], dtype=float
-            )
-            merged_row["missing_fraction"] = None if numpy.isnan(fractions).all() else float(numpy.nanmean(fractions))
-        merged_rows.append(merged_row)
-    return merged_rows
+def _start_date_chunks(metric_function_name: str, shard_start_tables: list[list[pandas.DataFrame]]) -> tuple:
+    """The dask chunks of the start dates in one evaluation of all of them: the ones of the shards, one after the other.
+    Shards written without them were evaluated with one start date per chunk, two for the geostrophic currents."""
+    layouts = [getattr(tables, "merge_layout", None) for tables in shard_start_tables]
+    if any(layout is None for layout in layouts):
+        count = sum(len(tables) for tables in shard_start_tables)
+        size = START_DATES_PER_CHUNK if "geostrophic" in metric_function_name else 1
+        return tuple(min(size, count - start) for start in range(0, count, size))
+    chunks = []
+    for layout in layouts:
+        shard_chunks = set(layout["start_date_chunks"].values())
+        if len(shard_chunks) != 1:
+            raise ValueError(f"{metric_function_name}: the variables of a shard have different start date chunks")
+        chunks += shard_chunks.pop()
+    return tuple(chunks)
+
+
+def _mean_over_start_dates(values: numpy.ndarray, start_date_chunks: tuple) -> numpy.ndarray:
+    """``rmsd._mean_over_starts`` on these values of each start date (one row per start date), in their dtype."""
+    start_date_dimension = Dimension.FIRST_DAY_DATETIME.key()
+    lazy_values = dask.array.from_array(values, chunks=(start_date_chunks, -1))
+    return xarray.DataArray(lazy_values, dims=[start_date_dimension, "row"]).mean(dim=start_date_dimension).values
+
+
+def _missing_fraction_column(
+    metric_function_name: str, shard_start_tables: list[list[pandas.DataFrame]], start_tables: list[pandas.DataFrame]
+) -> list[float]:
+    """The missing fraction of all the start dates, computed from the one of each start date and lead day as
+    ``rmsd`` computes it. Shards written without them give the mean of their values weighted by their start dates."""
+    layouts = [getattr(tables, "merge_layout", None) for tables in shard_start_tables]
+    if any(layout is None for layout in layouts):
+        print(
+            f"WARNING: {metric_function_name}: shards without the missing fraction of each start date, "
+            "the merged missing fraction is the mean of the shard ones",
+            file=sys.stderr,
+        )
+        fractions = numpy.stack([table[MISSING_FRACTION_COLUMN].to_numpy(dtype=float) for table in start_tables])
+        return list(numpy.nanmean(fractions, axis=0))
+    start_date_dimension = Dimension.FIRST_DAY_DATETIME.key()
+    by_forecast = xarray.concat(
+        [layout["missing_fraction_by_forecast"] for layout in layouts], dim=start_date_dimension
+    )
+    chunked = {}
+    for variable_name, chunks in layouts[0]["missing_fraction_chunks"].items():
+        for layout in layouts[1:]:
+            other = layout["missing_fraction_chunks"][variable_name]
+            if {dimension: chunk for dimension, chunk in other.items() if dimension != start_date_dimension} != {
+                dimension: chunk for dimension, chunk in chunks.items() if dimension != start_date_dimension
+            }:
+                raise ValueError(f"{metric_function_name}: the shards chunk the missing fraction differently")
+        chunked[variable_name] = by_forecast[variable_name].chunk(
+            {
+                **chunks,
+                start_date_dimension: tuple(
+                    chunk
+                    for layout in layouts
+                    for chunk in layout["missing_fraction_chunks"][variable_name][start_date_dimension]
+                ),
+            }
+        )
+    missing_fractions = rmsd.missing_fractions_over_forecasts(xarray.Dataset(chunked)).compute()
+    return [
+        rmsd._missing_fraction_at_depth(missing_fractions, variable_name, depth_level)
+        for variable_name, depth_level in layouts[0]["missing_fraction_cells"]
+    ]
+
+
+def _gridded_rows(metric_function_name: str, shard_start_tables: list[list[pandas.DataFrame]]) -> list[dict]:
+    """The rows of the scores of all the start dates, from the start tables of each shard, in start date order. The
+    Missing fraction column of the start tables becomes the one of all the start dates, as in one evaluation."""
+    start_tables = [table for tables in shard_start_tables for table in tables]
+    first = start_tables[0]
+    if any(
+        not table.index.equals(first.index) or not table.columns.equals(first.columns) for table in start_tables
+    ):
+        raise ValueError(f"{metric_function_name}: the start tables do not have the same rows")
+    if MESSAGE_COLUMN in first.columns:
+        return []
+    start_date_chunks = _start_date_chunks(metric_function_name, shard_start_tables)
+    mean_table = first.copy()
+    for column in first.columns:
+        if column != MISSING_FRACTION_COLUMN:
+            values = numpy.stack([table[column].to_numpy() for table in start_tables])
+            mean_table[column] = _mean_over_start_dates(values, start_date_chunks)
+    if MISSING_FRACTION_COLUMN in first.columns:
+        column = _missing_fraction_column(metric_function_name, shard_start_tables, start_tables)
+        mean_table[MISSING_FRACTION_COLUMN] = column
+        for table in start_tables:
+            table[MISSING_FRACTION_COLUMN] = column
+    return score_rows(metric_function_name, mean_table)
 
 
 def _lagrangian_rows(metric_function_name: str, shards: list[_Shard], lead_days_count: int) -> list[dict]:
@@ -418,13 +504,14 @@ def merge(arguments: argparse.Namespace) -> None:
     lead_days_count = challenger_dataset.sizes[Dimension.LEAD_DAY_INDEX.key()]
     shards = [_Shard(Path(directory), challenger_name, region.id) for directory in arguments.shards]
     _check_start_dates(shards, year_start_dates)
+    _check_shard_sizes(shards)
 
     start_tables = _merged_start_tables(shards)
     matchups = _merged_matchups(shards)
     rows = []
     for name in METRIC_FUNCTION_NAMES:
         if name in start_tables:
-            rows += _gridded_rows(name, start_tables[name])
+            rows += _gridded_rows(name, [shard.start_tables[name] for shard in shards])
         elif name == CLASS4_METRIC_FUNCTION_NAME:
             rows += _class4_rows(matchups, shards, lead_days_count)
         elif name in LAGRANGIAN_METRIC_FUNCTION_NAMES:
